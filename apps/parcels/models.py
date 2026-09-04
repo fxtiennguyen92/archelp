@@ -60,25 +60,30 @@ class Commune(models.Model):
 
 class DocumentUrbanisme(models.Model):
     """
-    Le document d'urbanisme en vigueur sur une commune (PLU, PLUi, POS, CC, PSMV).
-    Une commune peut en avoir plusieurs dans le temps ; un seul est en vigueur.
-    Un PLUi couvre plusieurs communes.
+    Document d'urbanisme issu du GPU (PLU, PLUi, POS, CC, PSMV).
+    Clé naturelle : (partition, idurba). La source contient des doublons
+    résiduels ; le pipeline de dérivation ne retient qu'une ligne par couple.
     """
 
     class TypeDoc(models.TextChoices):
         PLU = "PLU", "Plan Local d'Urbanisme"
-        PLUI = "PLUi", "Plan Local d'Urbanisme intercommunal"
+        PLUI = "PLUI", "Plan Local d'Urbanisme intercommunal"
         POS = "POS", "Plan d'Occupation des Sols"
         CC = "CC", "Carte Communale"
         PSMV = "PSMV", "Plan de Sauvegarde et de Mise en Valeur"
         RNU = "RNU", "Règlement National d'Urbanisme"
 
     partition = models.CharField(
-        max_length=50,
-        unique=True,
+        max_length=32,
         db_index=True,
-        help_text="Identifiant GPU, ex: DU_67482. Clé de rattachement du zonage.",
+        help_text="Identifiant GPU de partition, ex: DU_67482. Non unique.",
     )
+    idurba = models.CharField(
+        max_length=30,
+        db_index=True,
+        help_text="Identifiant CNIG du document, ex: 67482_PLU_20200115",
+    )
+
     type_document = models.CharField(max_length=10, choices=TypeDoc.choices)
 
     communes = models.ManyToManyField(
@@ -91,10 +96,22 @@ class DocumentUrbanisme(models.Model):
     date_fin_validite = models.DateField(null=True, blank=True)
     est_en_vigueur = models.BooleanField(default=True, db_index=True)
 
-    url_gpu = models.URLField(
-        max_length=500,
+    nom_procedure = models.CharField(
+        max_length=10,
         blank=True,
-        help_text="Fiche sur geoportail-urbanisme.gouv.fr",
+        help_text="Code CNIG de la procédure : R (révision), M1 (modification), MS1...",
+    )
+
+    nom_reglement = models.CharField(max_length=200, blank=True)
+    url_reglement = models.URLField(max_length=500, blank=True)
+    url_plan = models.URLField(max_length=500, blank=True)
+    site_web = models.URLField(max_length=500, blank=True)
+
+    a_doublon_source = models.BooleanField(
+        default=False,
+        db_index=True,
+        help_text="Vrai si la source contenait plusieurs lignes opposables "
+        "pour cette partition. Réponse à vérifier auprès de la mairie.",
     )
 
     created_at = models.DateTimeField(auto_now_add=True)
@@ -105,24 +122,34 @@ class DocumentUrbanisme(models.Model):
         verbose_name = "Document d'urbanisme"
         verbose_name_plural = "Documents d'urbanisme"
         ordering = ["-date_approbation"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["partition", "idurba"],
+                name="unique_partition_idurba",
+            )
+        ]
 
     def __str__(self):
-        return f"{self.type_document} {self.partition}"
-
+        return f"{self.type_document} {self.idurba}"
 
 class Zone(models.Model):
     """
-    Zone de zonage issue d'un document d'urbanisme (U, AU, A, N + sous-zones).
-    Standard CNIG. C'est l'objet auquel se rattache le règlement.
+    Zone de zonage d'un document d'urbanisme (U, AU, A, N + sous-zones).
+    Les polygones épars portant le même libellé sont fusionnés en une
+    seule entrée : le règlement s'applique au libellé, pas à l'îlot.
     """
 
     class TypeZone(models.TextChoices):
         U = "U", "Zone urbaine"
         AU = "AU", "Zone à urbaniser"
-        A = "A", "Zone agricole"
-        N = "N", "Zone naturelle et forestière"
         AUC = "AUc", "Zone à urbaniser constructible"
         AUS = "AUs", "Zone à urbaniser stricte"
+        A = "A", "Zone agricole"
+        N = "N", "Zone naturelle et forestière"
+        CC_OUVERT = "CC01", "CC — ouvert à la construction"
+        CC_ACTIVITES = "CC02", "CC — réservé aux activités"
+        CC_FERME = "CC03", "CC — fermé à la construction"
+        CC_NON_COUVERT = "CC99", "CC — non couvert par la carte"
         AUTRE = "AUTRE", "Autre / non normalisé"
 
     document = models.ForeignKey(
@@ -134,7 +161,7 @@ class Zone(models.Model):
     libelle = models.CharField(
         max_length=50,
         db_index=True,
-        help_text="Libellé exact du PLU, ex: UB2, UAa, 1AU, Nzh",
+        help_text="Libellé exact du PLU, ex: UD1, IAUB, Nzh",
     )
     libelle_long = models.CharField(max_length=500, blank=True)
 
@@ -142,13 +169,26 @@ class Zone(models.Model):
         max_length=10,
         choices=TypeZone.choices,
         db_index=True,
-        help_text="Type normalisé CNIG, déduit du libellé",
+        help_text="Type normalisé CNIG, champ typezone de l'API",
     )
 
-    geom = models.MultiPolygonField(
-        srid=4326,
-        spatial_index=True,
+    nom_fichier_reglement = models.CharField(
+        max_length=300,
+        blank=True,
+        help_text="Champ nomfic du GPU, ex: 246700488_reglement_20260206.pdf#page=95",
     )
+    page_reglement = models.IntegerField(
+        null=True,
+        blank=True,
+        help_text="Page extraite de nomfic. Point d'entrée dans le PDF.",
+    )
+
+    nb_polygones = models.IntegerField(
+        default=1,
+        help_text="Nombre de polygones fusionnés sous ce libellé",
+    )
+
+    geom = models.MultiPolygonField(srid=4326, spatial_index=True)
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -164,9 +204,12 @@ class Zone(models.Model):
                 name="unique_zone_par_document",
             )
         ]
+        indexes = [
+            models.Index(fields=["type_zone", "libelle"]),
+        ]
 
     def __str__(self):
-        return f"{self.libelle} — {self.document.partition}"
+        return f"{self.libelle} — {self.document.idurba}"
 
 class Parcelle(models.Model):
     """
@@ -211,6 +254,21 @@ class Parcelle(models.Model):
         through="ParcelleZone",
         related_name="parcelles",
         blank=True,
+    )
+
+    feuille = models.IntegerField(
+        default=1,
+        help_text="Numéro de feuille cadastrale",
+    )
+    code_arrondissement = models.CharField(
+        max_length=3,
+        default="000",
+        help_text="Code arrondissement, non nul à Paris/Lyon/Marseille",
+    )
+    gid_ign = models.IntegerField(
+        null=True,
+        blank=True,
+        help_text="Identifiant interne IGN, pour traçabilité",
     )
 
     created_at = models.DateTimeField(auto_now_add=True)
