@@ -41,6 +41,11 @@ class CommuneOut(Schema):
     code_departement: str
 
 
+class AvertissementOut(Schema):
+    code: str
+    params: dict = {}
+
+
 class ParcelleOut(Schema):
     idu: str
     section: str
@@ -48,7 +53,7 @@ class ParcelleOut(Schema):
     contenance_m2: Optional[int]
     commune: CommuneOut
     zones: List[ZoneOut]
-    avertissements: List[str]
+    avertissements: List[AvertissementOut]
     geometry: dict
 
 
@@ -114,74 +119,47 @@ def serialiser_parcelle(parcelle):
         "geometry": json.loads(parcelle.geom.geojson),
     }
 
-
 def construire_avertissements(parcelle, liens):
     """
-    Les données publiques comportent des incohérences connues ; les taire
-    reviendrait à donner une fausse impression de certitude sur un sujet
-    à portée juridique.
+    Retourne des codes, pas des phrases : l'interface est trilingue
+    et doit pouvoir traduire. Les paramètres permettent d'insérer
+    les valeurs variables dans la chaîne traduite.
     """
     messages = []
 
     if not liens:
-        messages.append(
-            "Aucun zonage trouvé pour cette parcelle. La commune relève "
-            "peut-être du Règlement National d'Urbanisme, ou son document "
-            "n'est pas encore publié sur le Géoportail de l'Urbanisme."
-        )
+        messages.append({"code": "aucun_zonage", "params": {}})
         return messages
 
     if len(liens) > 1:
-        libelles = ", ".join(f"{l.zone.libelle} ({l.part_pct:.0f} %)" for l in liens)
-        messages.append(
-            f"Parcelle à cheval sur {len(liens)} zones : {libelles}. "
-            "Les règles diffèrent selon la partie concernée du terrain."
-        )
+        messages.append({
+            "code": "multi_zones",
+            "params": {
+                "nombre": len(liens),
+                "detail": ", ".join(
+                    f"{l.zone.libelle} ({l.part_pct:.0f} %)" for l in liens
+                ),
+            },
+        })
 
-    documents = {l.zone.document_id for l in liens}
-    if len(documents) > 1:
-        messages.append(
-            "Les zones proviennent de documents d'urbanisme différents. "
-            "Vérification en mairie indispensable."
-        )
+    if len({l.zone.document_id for l in liens}) > 1:
+        messages.append({"code": "documents_multiples", "params": {}})
 
     if any(l.zone.document.a_doublon_source for l in liens):
-        messages.append(
-            "La source publique contient plusieurs documents opposables pour "
-            "cette commune. La règle applicable ne peut être déterminée "
-            "automatiquement."
-        )
+        messages.append({"code": "doublon_source", "params": {}})
 
     types_cc = {"CC01", "CC02", "CC03", "CC99"}
-    if any(l.zone.type_zone in types_cc for l in liens):
-        messages.append(
-            "Commune couverte par une carte communale : elle ne délimite que "
-            "les secteurs constructibles et non constructibles. Les règles de "
-            "hauteur, de recul et d'emprise relèvent du Règlement National "
-            "d'Urbanisme."
-        )
+    est_cc = any(l.zone.type_zone in types_cc for l in liens)
+    if est_cc:
+        messages.append({"code": "carte_communale", "params": {}})
 
-    sans_reglement = [l for l in liens if not l.zone.page_reglement]
-    if sans_reglement and not any(l.zone.type_zone in types_cc for l in liens):
-        messages.append(
-            "La source ne précise pas la page du règlement pour certaines "
-            "zones : le document complet doit être consulté."
-        )
-    
     if any(l.zone.document.type_document == "PSMV" for l in liens):
-        messages.append(
-            "Parcelle située dans le périmètre d'un Plan de Sauvegarde et de "
-            "Mise en Valeur (secteur sauvegardé). Les règles patrimoniales "
-            "priment sur le PLU et l'avis de l'Architecte des Bâtiments de "
-            "France est requis."
-        )
+        messages.append({"code": "psmv", "params": {}})
 
-    messages.append(
-        "Données issues du Géoportail de l'Urbanisme et du cadastre IGN. "
-        "Un règlement d'urbanisme peut évoluer : confirmer auprès de la "
-        "mairie avant toute décision de conception."
-    )
+    if any(not l.zone.page_reglement for l in liens) and not est_cc:
+        messages.append({"code": "page_inconnue", "params": {}})
 
+    messages.append({"code": "source_officielle", "params": {}})
     return messages
 
 
@@ -263,10 +241,9 @@ def recherche_adresse(request, adresse: str, code_insee: str = None):
     sortie = serialiser_parcelle(parcelle)
 
     if not geo["fiable"]:
-        sortie["avertissements"].insert(0, (
-            f"Géocodage approximatif (score {geo['score']:.2f}, "
-            f"précision « {geo['precision']} »). La parcelle identifiée "
-            "peut ne pas correspondre à l'adresse recherchée."
-        ))
+        sortie["avertissements"].insert(0, {
+            "code": "geocodage_approximatif",
+            "params": {"score": round(geo["score"], 2), "precision": geo["precision"]},
+        })
 
     return {"geocodage": geo, "parcelle": sortie, "message": None}
