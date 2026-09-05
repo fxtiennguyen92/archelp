@@ -8,7 +8,19 @@ environ.Env.read_env(BASE_DIR / ".env")
 
 SECRET_KEY = env("SECRET_KEY")
 DEBUG = env("DEBUG")
+
 ALLOWED_HOSTS = ["localhost", "127.0.0.1"]
+
+# Domaines supplémentaires quand l'application passe par le tunnel.
+_extra = env("EXTRA_ALLOWED_HOSTS", default="")
+if _extra:
+    ALLOWED_HOSTS += [h.strip() for h in _extra.split(",") if h.strip()]
+
+# Cloudflare termine le TLS : sans cela, Django croit être en HTTP
+# et les vérifications CSRF échouent sur les formulaires de l'admin.
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+CSRF_TRUSTED_ORIGINS = [f"https://{h}" for h in ALLOWED_HOSTS
+                        if h not in ("localhost", "127.0.0.1")]
 
 INSTALLED_APPS = [
     "django.contrib.admin",
@@ -32,6 +44,7 @@ MIDDLEWARE = [
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
+    "whitenoise.middleware.WhiteNoiseMiddleware",
 ]
 
 ROOT_URLCONF = "config.urls"
@@ -74,3 +87,5 @@ MEDIA_URL = "media/"
 MEDIA_ROOT = BASE_DIR / "media"
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+
+PUBLIC_BASE_URL = env("PUBLIC_BASE_URL", default="")

@@ -33,6 +33,8 @@ class ZoneOut(Schema):
     document_idurba: str
     document_type: str
     date_approbation: Optional[str]
+    url_reglement: Optional[str]
+    reglement_nb_pages: Optional[int]
 
 
 class CommuneOut(Schema):
@@ -87,6 +89,25 @@ def serialiser_parcelle(parcelle):
     zones = []
     for lien in liens:
         z, doc = lien.zone, lien.zone.document
+
+        # Le nomfic du GPU donne le nom du fichier ; on cherche le PDF
+        # correspondant réellement téléchargé, sinon n'importe quel
+        # règlement du même document.
+        nom_attendu = (z.nom_fichier_reglement or "").split("#")[0]
+        pdf = None
+        if nom_attendu:
+            pdf = doc.reglements.filter(titre=nom_attendu).exclude(fichier="").first()
+        if pdf is None:
+            pdf = doc.reglements.filter(
+                type_piece="REGLEMENT"
+            ).exclude(fichier="").first()
+
+        url_pdf = None
+        if pdf and pdf.fichier:
+            url_pdf = pdf.fichier.url
+            if z.page_reglement:
+                url_pdf = f"{url_pdf}#page={z.page_reglement}"
+
         zones.append({
             "libelle": z.libelle,
             "libelle_long": z.libelle_long,
@@ -96,6 +117,8 @@ def serialiser_parcelle(parcelle):
             "est_dominante": lien.est_dominante,
             "fichier_reglement": z.nom_fichier_reglement,
             "page_reglement": z.page_reglement,
+            "url_reglement": url_pdf,
+            "reglement_nb_pages": pdf.nb_pages if pdf else None,
             "document_idurba": doc.idurba,
             "document_type": doc.type_document,
             "date_approbation": doc.date_approbation.isoformat()

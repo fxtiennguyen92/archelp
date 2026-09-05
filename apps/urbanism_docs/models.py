@@ -22,7 +22,9 @@ class ReglementDocument(models.Model):
     class Statut(models.TextChoices):
         A_TELECHARGER = "A_TELECHARGER", "À télécharger"
         TELECHARGE = "TELECHARGE", "Téléchargé"
-        TEXTE_EXTRAIT = "TEXTE_EXTRAIT", "Texte extrait"
+        TEXTE_EXTRAIT = "TEXTE_EXTRAIT", "Texte brut extrait"
+        STRUCTURE_N1 = "STRUCTURE_N1", "Structuré SRU niveau 1"
+        REGLES_N2 = "REGLES_N2", "Règles extraites SRU niveau 2"
         ERREUR = "ERREUR", "Erreur"
 
     document = models.ForeignKey(
@@ -42,6 +44,11 @@ class ReglementDocument(models.Model):
     url_source = models.URLField(
         max_length=1000,
         help_text="URL d'origine du PDF",
+    )
+    chemin_interne = models.CharField(
+        max_length=500,
+        blank=True,
+        help_text="Chemin du fichier dans l'archive ZIP du GPU",
     )
     fichier = models.FileField(
         upload_to="reglements/%Y/%m/",
@@ -104,69 +111,92 @@ class ReglementDocument(models.Model):
                 h.update(bloc)
         return h.hexdigest()
 
-
 class ReglementSection(models.Model):
     """
-    Un bloc de texte extrait du PDF, découpé par article.
-    C'est l'unité de citation : toute réponse doit pouvoir pointer
-    vers une section précise, avec sa page et son document.
+    Fragment de règlement, structuré selon le standard CNIG SRU niveau 1 :
+    arborescence de titres, sous-titres, paragraphes et alinéas.
+
+    La hiérarchie n'est pas cosmétique : un règlement renvoie sans cesse à
+    d'autres articles. Sans l'arbre, impossible de fournir le contexte
+    nécessaire à une réponse correcte.
     """
 
-    reglement = models.ForeignKey(
-        ReglementDocument,
-        on_delete=models.CASCADE,
-        related_name="sections",
-    )
+    class TypeFragment(models.TextChoices):
+        TITRE = "TITRE", "Titre"
+        SOUS_TITRE = "SOUS_TITRE", "Sous-titre"
+        CHAPITRE = "CHAPITRE", "Chapitre"
+        SECTION = "SECTION", "Section"
+        ARTICLE = "ARTICLE", "Article"
+        PARAGRAPHE = "PARAGRAPHE", "Paragraphe"
+        ALINEA = "ALINEA", "Alinéa"
+        ILLUSTRATION = "ILLUSTRATION", "Schéma ou illustration"
 
-    zone = models.ForeignKey(
-        Zone,
-        on_delete=models.SET_NULL,
+    reglement = models.ForeignKey(
+        ReglementDocument, on_delete=models.CASCADE, related_name="sections"
+    )
+    parent = models.ForeignKey(
+        "self",
+        on_delete=models.CASCADE,
         null=True,
         blank=True,
-        related_name="sections",
-        help_text="Zone concernée, si la section est rattachable",
+        related_name="enfants",
     )
 
-    ordre = models.IntegerField(
-        help_text="Position dans le document, pour restituer l'ordre de lecture",
+    type_fragment = models.CharField(
+        max_length=20, choices=TypeFragment.choices, db_index=True
     )
+    profondeur = models.IntegerField(
+        default=0, help_text="Niveau dans l'arbre, 0 pour la racine"
+    )
+    ordre = models.IntegerField(help_text="Rang parmi les frères")
+    chemin = models.CharField(
+        max_length=200,
+        blank=True,
+        db_index=True,
+        help_text="Chemin matérialisé, ex: 0002.0005.0001 — pour trier "
+        "et retrouver une sous-arborescence en une requête",
+    )
+
+    zones = models.ManyToManyField(
+        Zone,
+        blank=True,
+        related_name="sections",
+        help_text="Zones concernées. Un même chapitre couvre souvent "
+        "plusieurs zones (A1 à A5 partagent la page 177).",
+    )
+
+    numero = models.CharField(
+        max_length=50, blank=True, db_index=True,
+        help_text="Ex: UB 10, ou UB-4.2 pour un PLU post-2015"
+    )
+    titre = models.CharField(max_length=500, blank=True)
+    texte = models.TextField(blank=True)
+
     page_debut = models.IntegerField(null=True, blank=True)
     page_fin = models.IntegerField(null=True, blank=True)
 
-    titre = models.CharField(
-        max_length=500,
+    renvois = models.ManyToManyField(
+        "self",
         blank=True,
-        help_text="Ex: Article UB 10 - Hauteur maximale des constructions",
-    )
-    numero_article = models.CharField(
-        max_length=50,
-        blank=True,
-        db_index=True,
-        help_text="Ex: UB 10, ou 'UB-4.2' pour un PLU post-2015",
+        symmetrical=False,
+        related_name="cite_par",
+        help_text="Articles cités par ce fragment",
     )
 
-    texte = models.TextField()
     nb_caracteres = models.IntegerField(default=0)
-
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        verbose_name = "Section de règlement"
-        verbose_name_plural = "Sections de règlement"
-        ordering = ["reglement", "ordre"]
-        constraints = [
-            models.UniqueConstraint(
-                fields=["reglement", "ordre"],
-                name="unique_section_par_reglement",
-            )
-        ]
+        verbose_name = "Fragment de règlement (SRU niveau 1)"
+        verbose_name_plural = "Fragments de règlement (SRU niveau 1)"
+        ordering = ["reglement", "chemin"]
         indexes = [
-            models.Index(fields=["zone", "numero_article"]),
+            models.Index(fields=["reglement", "chemin"]),
+            models.Index(fields=["reglement", "type_fragment"]),
         ]
 
     def __str__(self):
-        etiquette = self.titre or self.numero_article or f"section {self.ordre}"
-        return f"{etiquette} — p.{self.page_debut}"
+        return f"{self.numero or self.type_fragment} — {self.titre[:60]}"
 
     def save(self, *args, **kwargs):
         self.nb_caracteres = len(self.texte)

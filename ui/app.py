@@ -11,7 +11,10 @@ import requests
 import streamlit as st
 from streamlit_folium import st_folium
 
-API = "http://localhost:8000/api"
+import os
+
+BASE = os.environ.get("ARCHELP_API_BASE", "http://localhost:8000")
+API = f"{BASE}/api"
 
 # ---------- Traductions ----------
 # Les termes juridiques français (PLU, emprise au sol, recul...) sont
@@ -47,6 +50,10 @@ T = {
         "aucun_resultat": "Aucun résultat",
         "adresse_trouvee": "Adresse localisée",
         "erreur_api": "L'API ne répond pas. Vérifiez que le serveur Django est démarré.",
+        "ouvrir_pdf": "Ouvrir le règlement",
+        "page_precise": "page {page} sur {total}",
+        "page_inconnue_court": "page non précisée",
+        "pdf_absent": "PDF non encore récupéré",
     },
     "en": {
         "titre": "ArcHelp — Urban planning lookup",
@@ -76,6 +83,10 @@ T = {
         "aucun_resultat": "No result",
         "adresse_trouvee": "Address located",
         "erreur_api": "The API is not responding. Check that the Django server is running.",
+        "ouvrir_pdf": "Open the regulation",
+        "page_precise": "page {page} of {total}",
+        "page_inconnue_court": "page not specified",
+        "pdf_absent": "PDF not yet retrieved",
     },
     "de": {
         "titre": "ArcHelp — Bauleitplanung-Abfrage",
@@ -105,6 +116,10 @@ T = {
         "aucun_resultat": "Kein Ergebnis",
         "adresse_trouvee": "Adresse lokalisiert",
         "erreur_api": "Die API antwortet nicht. Prüfen Sie, ob der Django-Server läuft.",
+        "ouvrir_pdf": "Vorschrift öffnen",
+        "page_precise": "Seite {page} von {total}",
+        "page_inconnue_court": "Seite nicht angegeben",
+        "pdf_absent": "PDF noch nicht abgerufen",
     },
 }
 
@@ -303,10 +318,23 @@ def afficher_resultat(donnees, langue):
                 f"{z['date_approbation'] or ''}</span></div>",
                 unsafe_allow_html=True,
             )
-            if z["fichier_reglement"]:
-                page = z["page_reglement"]
-                suffixe = f" ({t['page']} {page})" if page else f" ({t['non_precisee']})"
-                st.caption(f"📄 {z['fichier_reglement'].split('#')[0]}{suffixe}")
+            url = z.get("url_reglement")
+            if url:
+                total = z.get("reglement_nb_pages")
+                page = z.get("page_reglement")
+                if page and total:
+                    detail = t["page_precise"].format(page=page, total=total)
+                elif total:
+                    detail = f"{total} p. · {t['page_inconnue_court']}"
+                else:
+                    detail = t["page_inconnue_court"]
+                st.link_button(
+                    f"📄 {t['ouvrir_pdf']} — {detail}",
+                    f"{BASE}{url}",
+                    use_container_width=True,
+                )
+            elif z["fichier_reglement"]:
+                st.caption(f"📄 {z['fichier_reglement'].split('#')[0]} — {t['pdf_absent']}")
 
     if parcelle["avertissements"]:
         st.subheader(t["avertissements"])
