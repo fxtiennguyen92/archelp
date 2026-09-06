@@ -104,7 +104,11 @@ def serialiser_parcelle(parcelle):
 
         url_pdf = None
         if pdf and pdf.fichier:
-            url_pdf = pdf.fichier.url
+            from django.conf import settings
+            # URL absolue : le lien doit être ouvrable depuis le navigateur
+            # du client, quel que soit le service qui appelle l'API.
+            base = (settings.PUBLIC_BASE_URL or "").rstrip("/")
+            url_pdf = f"{base}{pdf.fichier.url}" if base else pdf.fichier.url
             if z.page_reglement:
                 url_pdf = f"{url_pdf}#page={z.page_reglement}"
 

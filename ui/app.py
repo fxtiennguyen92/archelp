@@ -12,8 +12,15 @@ import streamlit as st
 from streamlit_folium import st_folium
 
 import os
+from pathlib import Path
 
-BASE = os.environ.get("ARCHELP_API_BASE", "http://localhost:8000")
+from dotenv import load_dotenv
+
+load_dotenv(Path(__file__).resolve().parent.parent / ".env")
+
+# L'interface appelle l'API en local : elle tourne sur la même machine,
+# et passer par le domaine public la ferait bloquer par Cloudflare Access.
+BASE = os.environ.get("ARCHELP_API_BASE") or "http://localhost:8000"
 API = f"{BASE}/api"
 
 # ---------- Traductions ----------
@@ -330,7 +337,7 @@ def afficher_resultat(donnees, langue):
                     detail = t["page_inconnue_court"]
                 st.link_button(
                     f"📄 {t['ouvrir_pdf']} — {detail}",
-                    f"{BASE}{url}",
+                    url if url.startswith("http") else f"{BASE}{url}",
                     use_container_width=True,
                 )
             elif z["fichier_reglement"]:
