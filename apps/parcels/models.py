@@ -324,3 +324,117 @@ class ParcelleZone(models.Model):
 
     def __str__(self):
         return f"{self.parcelle.idu} ∩ {self.zone.libelle} ({self.part_pct:.1f}%)"
+
+class Prescription(models.Model):
+    """
+    Prescription surfacique du GPU : servitudes graphiques, périmètres,
+    emplacements réservés, hauteurs maximales.
+
+    Ces couches portent des règles que le règlement écrit ne contient pas.
+    L'article 10 UD du PLUi de l'Eurométropole renvoie explicitement au
+    règlement graphique pour la hauteur : sans cette table, le paramètre
+    le plus important pour un architecte reste introuvable.
+    """
+
+    # Nomenclature CNIG, codes observés sur le terrain.
+    TYPES = {
+        "01": "Espace boisé classé",
+        "02": "Périmètre de protection ou de vigilance",
+        "04": "Plan de déplacement urbain",
+        "05": "Emplacement réservé",
+        "07": "Élément de patrimoine ou paysage protégé",
+        "15": "Périmètre particulier",
+        "17": "Secteur de mixité sociale",
+        "18": "Secteur d'OAP",
+        "23": "Taille minimale des logements",
+        "25": "Continuité écologique",
+        "31": "Protection d'espèce",
+        "39": "Hauteur maximale",
+        "99": "Autre",
+    }
+
+    document = models.ForeignKey(
+        DocumentUrbanisme,
+        on_delete=models.CASCADE,
+        related_name="prescriptions",
+    )
+
+    gid_ign = models.IntegerField(db_index=True)
+    type_psc = models.CharField(max_length=2, db_index=True)
+    stype_psc = models.CharField(max_length=2, blank=True)
+
+    libelle = models.CharField(max_length=300, db_index=True)
+    txt = models.CharField(
+        max_length=200,
+        blank=True,
+        help_text="Valeur brute. Pour la hauteur : « 12mHT » (hors tout) "
+        "ou « 10mET » (égout de toiture) — deux modes de mesure distincts.",
+    )
+
+    valeur_num = models.FloatField(
+        null=True, blank=True,
+        help_text="Valeur numérique extraite de txt, quand elle existe",
+    )
+    unite = models.CharField(
+        max_length=10, blank=True,
+        help_text="m, %, ou vide",
+    )
+    reference_mesure = models.CharField(
+        max_length=10, blank=True,
+        help_text="HT (hors tout) ou ET (égout de toiture) pour les hauteurs",
+    )
+
+    geom = models.MultiPolygonField(srid=4326, spatial_index=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    synced_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        verbose_name = "Prescription"
+        verbose_name_plural = "Prescriptions"
+        ordering = ["type_psc", "libelle"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["document", "gid_ign"],
+                name="unique_prescription_ign",
+            )
+        ]
+
+    def __str__(self):
+        v = f" — {self.txt}" if self.txt else ""
+        return f"{self.libelle}{v}"
+
+    @property
+    def type_libelle(self):
+        return self.TYPES.get(self.type_psc, "Inconnu")
+
+
+class ParcellePrescription(models.Model):
+    """
+    Intersection parcelle × prescription. Comme pour le zonage, une
+    prescription peut ne couvrir qu'une partie du terrain : un espace
+    planté à conserver sur 10 % de la parcelle ne bloque pas le projet,
+    sur 80 % il le condamne.
+    """
+
+    parcelle = models.ForeignKey(Parcelle, on_delete=models.CASCADE)
+    prescription = models.ForeignKey(Prescription, on_delete=models.CASCADE)
+
+    surface_intersection_m2 = models.FloatField()
+    part_pct = models.FloatField()
+
+    computed_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Parcelle × Prescription"
+        verbose_name_plural = "Parcelles × Prescriptions"
+        ordering = ["-part_pct"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["parcelle", "prescription"],
+                name="unique_parcelle_prescription",
+            )
+        ]
+
+    def __str__(self):
+        return f"{self.parcelle.idu} ∩ {self.prescription.libelle} ({self.part_pct:.0f}%)"

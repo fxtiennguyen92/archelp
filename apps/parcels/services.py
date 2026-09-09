@@ -13,6 +13,8 @@ from django.contrib.gis.geos import GEOSGeometry, MultiPolygon, Point
 from django.db import transaction
 from django.utils import timezone
 
+import re
+
 API_PARCELLE = "https://apicarto.ign.fr/api/cadastre/parcelle"
 TIMEOUT = 60
 SEUIL_BRUIT_M2 = 1.0
@@ -164,6 +166,12 @@ def parcelle_par_point(lon, lat, force=False):
     parcelle = enregistrer_parcelle(features[0])
     if parcelle:
         calculer_zones(parcelle)
+        try:
+            calculer_prescriptions(parcelle)
+        except ErreurSource:
+            # Les prescriptions sont un complément : leur absence ne doit
+            # pas faire échouer la consultation du zonage.
+            pass
     return parcelle, True
 
 
@@ -232,3 +240,151 @@ def geocoder(adresse, code_insee=None):
         "fiable": props.get("score", 0) >= SCORE_FIABLE
                   and props.get("type") == "housenumber",
     }
+
+API_PRESCRIPTION = "https://apicarto.ign.fr/api/gpu/prescription-surf"
+
+# « 12mHT » → 12,0 m hors tout ; « 10mET » → 10,0 m égout de toiture.
+# La distinction n'est pas cosmétique : sur une toiture en pente,
+# l'écart entre les deux modes de mesure atteint plusieurs mètres.
+MOTIF_VALEUR = re.compile(
+    r"(\d+(?:[.,]\d+)?)\s*(m|%)\s*(HT|ET)?", re.IGNORECASE
+)
+
+
+def analyser_txt(txt):
+    """Extrait valeur, unité et mode de mesure du champ txt du GPU."""
+    if not txt:
+        return None, "", ""
+    trouve = MOTIF_VALEUR.search(txt)
+    if not trouve:
+        return None, "", ""
+    try:
+        valeur = float(trouve.group(1).replace(",", "."))
+    except ValueError:
+        return None, "", ""
+    unite = trouve.group(2).lower()
+    mesure = (trouve.group(3) or "").upper()
+    return valeur, unite, mesure
+
+
+def appeler_prescriptions(geom_geojson, tentatives=3):
+    derniere = None
+    for essai in range(tentatives):
+        try:
+            reponse = requests.get(
+                API_PRESCRIPTION,
+                params={"geom": json.dumps(geom_geojson)},
+                timeout=TIMEOUT,
+            )
+            reponse.raise_for_status()
+            return reponse.json().get("features") or []
+        except (requests.RequestException, ValueError) as exc:
+            derniere = exc
+            if essai < tentatives - 1:
+                time.sleep(2 ** essai)
+    raise ErreurSource(f"API Prescriptions injoignable : {derniere}")
+
+
+def calculer_prescriptions(parcelle):
+    """
+    Récupère les prescriptions couvrant la parcelle et calcule la part
+    de surface concernée. Interrogation par polygone et non par point :
+    une prescription locale — espace planté, emplacement réservé — ne
+    couvre souvent qu'une fraction du terrain.
+    """
+    from django.contrib.gis.db.models.functions import Area, Intersection, Transform
+    from apps.parcels.models import (
+        DocumentUrbanisme, ParcellePrescription, Prescription,
+    )
+
+    features = appeler_prescriptions(json.loads(parcelle.geom.geojson))
+    if not features:
+        return 0
+
+    # Le rattachement au document se fait par partition, comme pour le zonage.
+    documents = {}
+    maintenant = timezone.now()
+    objets = []
+
+    for feat in features:
+        props = feat["properties"]
+        partition = (props.get("partition") or "").strip()
+        gid = props.get("gid")
+        if not partition or gid is None:
+            continue
+
+        if partition not in documents:
+            documents[partition] = (
+                DocumentUrbanisme.objects.filter(partition=partition)
+                .order_by("-date_approbation")
+                .first()
+            )
+        doc = documents[partition]
+        if doc is None:
+            continue
+
+        geom = en_multipolygone(feat.get("geometry"))
+        if geom is None:
+            continue
+
+        valeur, unite, mesure = analyser_txt(props.get("txt"))
+
+        presc, _ = Prescription.objects.update_or_create(
+            document=doc,
+            gid_ign=gid,
+            defaults={
+                "type_psc": (props.get("typepsc") or "")[:2],
+                "stype_psc": (props.get("stypepsc") or "")[:2],
+                "libelle": (props.get("libelle") or "")[:300],
+                "txt": (props.get("txt") or "")[:200],
+                "valeur_num": valeur,
+                "unite": unite,
+                "reference_mesure": mesure,
+                "geom": geom,
+                "synced_at": maintenant,
+            },
+        )
+        objets.append(presc)
+
+    if not objets:
+        return 0
+
+    surface_parcelle = parcelle.contenance_m2
+
+    with transaction.atomic():
+        ParcellePrescription.objects.filter(parcelle=parcelle).delete()
+
+        ids = [o.id for o in objets]
+        candidates = Prescription.objects.filter(id__in=ids).annotate(
+            aire_commune=Area(Transform(Intersection("geom", parcelle.geom), 2154))
+        )
+
+        resultats = []
+        for presc in candidates:
+            if presc.aire_commune is None:
+                continue
+            m2 = presc.aire_commune.sq_m
+            if m2 < SEUIL_BRUIT_M2:
+                continue
+            resultats.append((presc, m2))
+
+        if not resultats:
+            return 0
+
+        # Contrairement au zonage, les prescriptions se superposent :
+        # le pourcentage se calcule sur la surface de la parcelle,
+        # pas sur la somme des intersections.
+        base = surface_parcelle
+        if not base:
+            geom_m2 = parcelle.geom.transform(2154, clone=True).area
+            base = geom_m2 or 1
+
+        for presc, m2 in resultats:
+            ParcellePrescription.objects.create(
+                parcelle=parcelle,
+                prescription=presc,
+                surface_intersection_m2=round(m2, 2),
+                part_pct=round(min(100.0, 100 * m2 / base), 2),
+            )
+
+    return len(resultats)

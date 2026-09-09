@@ -102,11 +102,20 @@ class Command(BaseCommand):
         )
 
         self.stdout.write("Calcul des intersections avec le zonage...")
-        total_liens = 0
+        from apps.parcels import services
+
+        total_liens, total_psc = 0, 0
         for parcelle in parcelles:
             total_liens += self._calculer_zones(parcelle)
+            try:
+                total_psc += services.calculer_prescriptions(parcelle)
+            except services.ErreurSource as exc:
+                self.stdout.write(
+                    self.style.WARNING(f"  prescriptions indisponibles : {exc}")
+                )
 
         self.stdout.write(self.style.SUCCESS(f"{total_liens} relations parcelle × zone."))
+        self.stdout.write(self.style.SUCCESS(f"{total_psc} relations parcelle × prescription."))
 
         if len(parcelles) <= 5:
             for parcelle in parcelles:
@@ -284,6 +293,22 @@ class Command(BaseCommand):
                     self.style.WARNING(
                         "  ⚠ Zones issues de documents différents — à vérifier en mairie."
                     )
+                )
+        
+        psc = parcelle.parcelleprescription_set.select_related(
+            "prescription"
+        ).order_by("-part_pct")
+
+        if psc:
+            self.stdout.write("  Prescriptions :")
+            for lien in psc:
+                p = lien.prescription
+                valeur = ""
+                if p.valeur_num is not None:
+                    mesure = f" {p.reference_mesure}" if p.reference_mesure else ""
+                    valeur = f"  →  {p.valeur_num:g} {p.unite}{mesure}"
+                self.stdout.write(
+                    f"    {lien.part_pct:5.1f}%  [{p.type_psc}] {p.libelle}{valeur}"
                 )
 
     @staticmethod
