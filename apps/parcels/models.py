@@ -353,6 +353,20 @@ class Prescription(models.Model):
         "99": "Autre",
     }
 
+    # Classement provisoire par impact sur la conception, à valider avec
+    # des praticiens : il est déduit des libellés, non de l'expérience
+    # du montage de dossiers.
+    IMPACT_FORT = {"39", "01", "05", "25"}      # valeur chiffrée, change le volume
+    IMPACT_PROCEDURE = {"07", "18", "17", "23"}  # autorisation ou programme imposé
+
+    @property
+    def niveau_impact(self):
+        if self.type_psc in self.IMPACT_FORT:
+            return "fort"
+        if self.type_psc in self.IMPACT_PROCEDURE:
+            return "procedure"
+        return "contexte"
+
     document = models.ForeignKey(
         DocumentUrbanisme,
         on_delete=models.CASCADE,

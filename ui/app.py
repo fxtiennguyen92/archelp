@@ -61,6 +61,13 @@ T = {
         "page_precise": "page {page} sur {total}",
         "page_inconnue_court": "page non précisée",
         "pdf_absent": "PDF non encore récupéré",
+        "prescriptions": "Prescriptions graphiques",
+        "impact_fort": "Contraintes chiffrées",
+        "impact_procedure": "Autorisations et programme",
+        "impact_contexte": "Contexte réglementaire",
+        "aucune_prescription": "Aucune prescription graphique relevée",
+        "mesure_HT": "hors tout",
+        "mesure_ET": "à l'égout de toiture",
     },
     "en": {
         "titre": "ArcHelp — Urban planning lookup",
@@ -94,6 +101,13 @@ T = {
         "page_precise": "page {page} of {total}",
         "page_inconnue_court": "page not specified",
         "pdf_absent": "PDF not yet retrieved",
+        "prescriptions": "Graphic prescriptions",
+        "impact_fort": "Quantified constraints",
+        "impact_procedure": "Permits and programme",
+        "impact_contexte": "Regulatory context",
+        "aucune_prescription": "No graphic prescription found",
+        "mesure_HT": "overall height",
+        "mesure_ET": "to the eaves",
     },
     "de": {
         "titre": "ArcHelp — Bauleitplanung-Abfrage",
@@ -127,6 +141,13 @@ T = {
         "page_precise": "Seite {page} von {total}",
         "page_inconnue_court": "Seite nicht angegeben",
         "pdf_absent": "PDF noch nicht abgerufen",
+        "prescriptions": "Zeichnerische Festsetzungen",
+        "impact_fort": "Bezifferte Auflagen",
+        "impact_procedure": "Genehmigungen und Programm",
+        "impact_contexte": "Rechtlicher Kontext",
+        "aucune_prescription": "Keine zeichnerische Festsetzung gefunden",
+        "mesure_HT": "Gesamthöhe",
+        "mesure_ET": "bis zur Traufe",
     },
 }
 
@@ -216,6 +237,14 @@ AVERTISSEMENTS = {
               "Bauvorschriften können sich ändern: vor jeder Planungsentscheidung beim "
               "Rathaus bestätigen lassen.",
     },
+    "prescriptions_fortes": {
+        "fr": "{nombre} prescription(s) graphique(s) affectent directement la "
+              "constructibilité du terrain — voir le tableau ci-dessous.",
+        "en": "{nombre} graphic prescription(s) directly affect what can be built "
+              "on this land — see the table below.",
+        "de": "{nombre} zeichnerische Festsetzung(en) wirken sich unmittelbar auf "
+              "die Bebaubarkeit aus — siehe Tabelle unten.",
+    },
 }
 
 COULEURS = {
@@ -223,6 +252,12 @@ COULEURS = {
     "A": "#d9d264", "N": "#6aa84f",
     "CC01": "#e05252", "CC02": "#c27ba0", "CC03": "#6aa84f", "CC99": "#999999",
     "AUTRE": "#8e7cc3",
+}
+
+COULEURS_IMPACT = {
+    "fort": "#c0392b",
+    "procedure": "#d68910",
+    "contexte": "#7f8c8d",
 }
 
 
@@ -289,6 +324,49 @@ def afficher_resultat(donnees, langue):
     t = T[langue]
     parcelle = donnees.get("parcelle")
 
+    prescriptions = parcelle.get("prescriptions") or []
+    if prescriptions:
+        st.subheader(t["prescriptions"])
+        for niveau in ("fort", "procedure", "contexte"):
+            groupe = [p for p in prescriptions if p["niveau_impact"] == niveau]
+            if not groupe:
+                continue
+
+            titre = t[f"impact_{niveau}"]
+            # Le contexte est replié : il compte souvent le plus de lignes
+            # alors qu'il change rarement la conception.
+            conteneur = st.expander(f"{titre} ({len(groupe)})",
+                                    expanded=(niveau != "contexte"))
+            with conteneur:
+                for p in groupe:
+                    couleur = COULEURS_IMPACT[niveau]
+                    valeur = ""
+                    if p["valeur"] is not None:
+                        mesure = p["reference_mesure"]
+                        suffixe = f" — {t['mesure_' + mesure]}" if mesure in ("HT", "ET") else ""
+                        valeur = (
+                            f"<br><b style='font-size:1.15em'>"
+                            f"{p['valeur']:g} {p['unite']}</b>"
+                            f"<span style='color:#666'>{suffixe}</span>"
+                        )
+                    couverture = (
+                        "" if p["part_pct"] >= 100
+                        else f" · {p['part_pct']:.0f} % ({p['surface_m2']:.0f} m²)"
+                    )
+
+                    nom = p["libelle"]
+                    nom_court = nom if len(nom) <= 70 else nom[:67] + "…"
+
+                    st.markdown(
+                        f"<div style='border-left:4px solid {couleur};"
+                        f"padding-left:10px;margin-bottom:10px' "
+                        f"title='{nom}'>"
+                        f"{nom_court}"
+                        f"<span style='color:#888;font-size:0.85em'>{couverture}</span>"
+                        f"{valeur}</div>",
+                        unsafe_allow_html=True,
+                    )
+    
     if parcelle is None:
         st.warning(donnees.get("message") or t["aucun_resultat"])
         return

@@ -18,7 +18,8 @@ import re
 API_PARCELLE = "https://apicarto.ign.fr/api/cadastre/parcelle"
 TIMEOUT = 60
 SEUIL_BRUIT_M2 = 1.0
-
+SEUIL_PRESCRIPTION_M2 = 10.0
+SEUIL_PRESCRIPTION_PCT = 0.5
 
 class ErreurSource(Exception):
     """Échec de récupération auprès d'une source externe."""
@@ -59,6 +60,11 @@ def en_multipolygone(geojson_geom):
             geom = MultiPolygon(repare, srid=4326)
         elif repare.geom_type == "MultiPolygon":
             geom = repare
+
+    # buffer(0) ne répare pas toutes les auto-intersections : mieux vaut
+    # écarter une géométrie douteuse que fausser un calcul de surface.
+    if not geom.valid or geom.empty:
+        return None
 
     return geom
 
@@ -364,7 +370,9 @@ def calculer_prescriptions(parcelle):
             if presc.aire_commune is None:
                 continue
             m2 = presc.aire_commune.sq_m
-            if m2 < SEUIL_BRUIT_M2:
+            # Deux sources géométriques différentes : les micro-intersections
+            # sont du bruit de bord, pas des contraintes réelles.
+            if m2 < SEUIL_PRESCRIPTION_M2:
                 continue
             resultats.append((presc, m2))
 
@@ -380,6 +388,9 @@ def calculer_prescriptions(parcelle):
             base = geom_m2 or 1
 
         for presc, m2 in resultats:
+            pct = min(100.0, 100 * m2 / base)
+            if pct < SEUIL_PRESCRIPTION_PCT and presc.valeur_num is None:
+                continue
             ParcellePrescription.objects.create(
                 parcelle=parcelle,
                 prescription=presc,

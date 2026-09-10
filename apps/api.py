@@ -37,6 +37,19 @@ class ZoneOut(Schema):
     reglement_nb_pages: Optional[int]
 
 
+class PrescriptionOut(Schema):
+    libelle: str
+    type_psc: str
+    type_libelle: str
+    niveau_impact: str
+    part_pct: float
+    surface_m2: float
+    valeur: Optional[float]
+    unite: str
+    reference_mesure: str
+    texte_source: str
+
+
 class CommuneOut(Schema):
     code_insee: str
     nom: str
@@ -57,6 +70,7 @@ class ParcelleOut(Schema):
     zones: List[ZoneOut]
     avertissements: List[AvertissementOut]
     geometry: dict
+    prescriptions: List[PrescriptionOut]
 
 
 class GeocodageOut(Schema):
@@ -129,6 +143,7 @@ def serialiser_parcelle(parcelle):
                                 if doc.date_approbation else None,
         })
 
+    prescriptions = serialiser_prescriptions(parcelle)
     avertissements = construire_avertissements(parcelle, liens)
 
     return {
@@ -142,9 +157,53 @@ def serialiser_parcelle(parcelle):
             "code_departement": parcelle.commune.code_departement,
         },
         "zones": zones,
+        "prescriptions": prescriptions,
         "avertissements": avertissements,
         "geometry": json.loads(parcelle.geom.geojson),
     }
+
+def serialiser_prescriptions(parcelle):
+    """
+    Regroupe les prescriptions par libellé : le GPU découpe parfois un même
+    périmètre en plusieurs polygones, ce qui ferait apparaître deux fois la
+    même contrainte avec des pourcentages partiels.
+    """
+    liens = parcelle.parcelleprescription_set.select_related("prescription")
+
+    groupes = {}
+    for lien in liens:
+        p = lien.prescription
+        cle = (p.libelle, p.txt) if p.valeur_num is not None else (p.libelle, "")
+        if cle not in groupes:
+            groupes[cle] = {
+                "libelle": p.libelle,
+                "type_psc": p.type_psc,
+                "type_libelle": p.type_libelle,
+                "niveau_impact": p.niveau_impact,
+                "part_pct": 0.0,
+                "surface_m2": 0.0,
+                "valeur": p.valeur_num,
+                "unite": p.unite,
+                "reference_mesure": p.reference_mesure,
+                "texte_source": p.txt,
+            }
+        groupes[cle]["part_pct"] += lien.part_pct
+        groupes[cle]["surface_m2"] += lien.surface_intersection_m2
+
+    ordre = {"fort": 0, "procedure": 1, "contexte": 2}
+    resultat = []
+    for g in groupes.values():
+        # Les géométries proviennent de deux sources : un écart de quelques
+        # dixièmes sur une contrainte couvrant tout le terrain est du bruit.
+        if g["part_pct"] >= 99:
+            g["part_pct"] = 100.0
+        else:
+            g["part_pct"] = round(min(100.0, g["part_pct"]), 1)
+        g["surface_m2"] = round(g["surface_m2"], 1)
+        resultat.append(g)
+
+    resultat.sort(key=lambda g: (ordre[g["niveau_impact"]], -g["part_pct"]))
+    return resultat
 
 def construire_avertissements(parcelle, liens):
     """
@@ -185,6 +244,16 @@ def construire_avertissements(parcelle, liens):
 
     if any(not l.zone.page_reglement for l in liens) and not est_cc:
         messages.append({"code": "page_inconnue", "params": {}})
+
+    forts = [
+        l for l in parcelle.parcelleprescription_set.select_related("prescription")
+        if l.prescription.niveau_impact == "fort"
+    ]
+    if forts:
+        messages.append({
+            "code": "prescriptions_fortes",
+            "params": {"nombre": len({l.prescription.libelle for l in forts})},
+        })
 
     messages.append({"code": "source_officielle", "params": {}})
     return messages
