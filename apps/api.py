@@ -35,6 +35,7 @@ class ZoneOut(Schema):
     date_approbation: Optional[str]
     url_reglement: Optional[str]
     reglement_nb_pages: Optional[int]
+    geometry: Optional[dict]
 
 
 class PrescriptionOut(Schema):
@@ -48,6 +49,7 @@ class PrescriptionOut(Schema):
     unite: str
     reference_mesure: str
     texte_source: str
+    geometry: Optional[dict]
 
 class ServitudeDetailOut(Schema):
     nom: str
@@ -156,6 +158,7 @@ def serialiser_parcelle(parcelle):
             "document_type": doc.type_document,
             "date_approbation": doc.date_approbation.isoformat()
                                 if doc.date_approbation else None,
+            "geometry": self_geom_zone(z, parcelle),
         })
 
     prescriptions = serialiser_prescriptions(parcelle)
@@ -179,6 +182,8 @@ def serialiser_parcelle(parcelle):
     }
 
 def serialiser_prescriptions(parcelle):
+    import json
+
     """
     Regroupe les prescriptions par libellé : le GPU découpe parfois un même
     périmètre en plusieurs polygones, ce qui ferait apparaître deux fois la
@@ -202,13 +207,29 @@ def serialiser_prescriptions(parcelle):
                 "unite": p.unite,
                 "reference_mesure": p.reference_mesure,
                 "texte_source": p.txt,
+                "geometry": None,
             }
         groupes[cle]["part_pct"] += lien.part_pct
         groupes[cle]["surface_m2"] += lien.surface_intersection_m2
 
+        decoupe = None
+        try:
+            inter = p.geom.intersection(parcelle.geom)
+            if not inter.empty:
+                decoupe = inter
+        except Exception:
+            pass
+
+        if decoupe is not None:
+            existante = groupes[cle].get("_geom")
+            groupes[cle]["_geom"] = decoupe if existante is None else existante.union(decoupe)
+
     ordre = {"fort": 0, "procedure": 1, "contexte": 2}
     resultat = []
     for g in groupes.values():
+        geom = g.pop("_geom", None)
+        g["geometry"] = json.loads(geom.geojson) if geom is not None else None
+
         # Les géométries proviennent de deux sources : un écart de quelques
         # dixièmes sur une contrainte couvrant tout le terrain est du bruit.
         if g["part_pct"] >= 99:
@@ -422,3 +443,19 @@ def serialiser_servitudes(parcelle):
     # Les servitudes imposant un avis conforme passent devant.
     resultat.sort(key=lambda g: (not g["requiert_abf"], -g["part_pct_max"]))
     return resultat
+
+
+def self_geom_zone(zone, parcelle):
+    """
+    Renvoie la seule partie de la zone qui recouvre la parcelle.
+    La zone entière peut couvrir des kilomètres carrés : l'envoyer
+    au navigateur serait inutilisable et très lourd.
+    """
+    import json
+    try:
+        decoupe = zone.geom.intersection(parcelle.geom)
+    except Exception:
+        return None
+    if decoupe.empty:
+        return None
+    return json.loads(decoupe.geojson)

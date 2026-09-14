@@ -397,22 +397,13 @@ def appeler_api(chemin, params=None):
         return None
 
 
-def dessiner_carte(parcelle):
+def dessiner_carte(parcelle, t):
     coords = parcelle["geometry"]["coordinates"][0][0]
     lons = [c[0] for c in coords]
     lats = [c[1] for c in coords]
     centre = [sum(lats) / len(lats), sum(lons) / len(lons)]
 
     carte = folium.Map(location=centre, zoom_start=18, tiles=None)
-    carte.get_root().html.add_child(folium.Element("""
-    <style>
-      .leaflet-control-attribution {
-        font-size: 9px;
-        opacity: 0.55;
-        background: rgba(255,255,255,0.6) !important;
-      }
-    </style>
-    """))
     folium.TileLayer(
         tiles="https://data.geopf.fr/wmts?SERVICE=WMTS&REQUEST=GetTile"
               "&VERSION=1.0.0&LAYER=ORTHOIMAGERY.ORTHOPHOTOS"
@@ -421,14 +412,59 @@ def dessiner_carte(parcelle):
         attr="IGN — Géoplateforme",
         name="Orthophoto IGN",
     ).add_to(carte)
-    folium.TileLayer("OpenStreetMap", name="Plan").add_to(carte)
+    folium.TileLayer(
+        tiles="https://data.geopf.fr/wmts?SERVICE=WMTS&REQUEST=GetTile"
+              "&VERSION=1.0.0&LAYER=GEOGRAPHICALGRIDSYSTEMS.PLANIGNV2"
+              "&STYLE=normal&TILEMATRIXSET=PM&TILEMATRIX={z}&TILEROW={y}"
+              "&TILECOL={x}&FORMAT=image/png",
+        attr="IGN — Géoplateforme",
+        name="Plan IGN",
+    ).add_to(carte)
 
+    # Zonage : une couche par zone, colorée selon le type CNIG.
+    groupe_zones = folium.FeatureGroup(name=t["zonage"], show=True)
+    for z in parcelle.get("zones", []):
+        if not z.get("geometry"):
+            continue
+        couleur = COULEURS.get(z["type_zone"], "#888888")
+        folium.GeoJson(
+            z["geometry"],
+            style_function=lambda _, c=couleur: {
+                "fillColor": c, "color": c,
+                "weight": 1, "fillOpacity": 0.45,
+            },
+            tooltip=f"{z['libelle']} — {z['part_pct']:.1f} %",
+        ).add_to(groupe_zones)
+    groupe_zones.add_to(carte)
+
+    # Prescriptions à impact fort : espaces à conserver, emplacements réservés.
+    # Les autres couvrent souvent toute la parcelle et masqueraient le zonage.
+    fortes = [
+        p for p in parcelle.get("prescriptions", [])
+        if p["niveau_impact"] == "fort" and p.get("geometry")
+        and p["part_pct"] < 100
+    ]
+    if fortes:
+        groupe_psc = folium.FeatureGroup(name=t["impact_fort"], show=True)
+        for p in fortes:
+            folium.GeoJson(
+                p["geometry"],
+                style_function=lambda _: {
+                    "fillColor": "#c0392b", "color": "#c0392b",
+                    "weight": 2, "fillOpacity": 0.35,
+                    "dashArray": "5, 5",
+                },
+                tooltip=f"{p['libelle']} — {p['part_pct']:.1f} %",
+            ).add_to(groupe_psc)
+        groupe_psc.add_to(carte)
+
+    # La parcelle par-dessus, sans remplissage : c'est le repère principal.
     folium.GeoJson(
         parcelle["geometry"],
-        name="Parcelle",
+        name=t["parcelle"],
         style_function=lambda _: {
             "fillColor": "#ffffff", "color": "#1f77b4",
-            "weight": 3, "fillOpacity": 0.15,
+            "weight": 3, "fillOpacity": 0,
         },
         tooltip=parcelle["idu"],
     ).add_to(carte)
@@ -522,7 +558,7 @@ def afficher_resultat(donnees, langue):
     gauche, droite = st.columns([3, 2])
 
     with gauche:
-        st_folium(dessiner_carte(parcelle), height=420, use_container_width=True,
+        st_folium(dessiner_carte(parcelle, t), height=420, use_container_width=True,
                   key=f"carte_{parcelle['idu']}", returned_objects=[])
 
     with droite:
