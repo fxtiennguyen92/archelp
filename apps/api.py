@@ -49,6 +49,20 @@ class PrescriptionOut(Schema):
     reference_mesure: str
     texte_source: str
 
+class ServitudeDetailOut(Schema):
+    nom: str
+    type_assiette: str
+    part_pct: float
+
+
+class ServitudeOut(Schema):
+    sup_type: str
+    categorie: str
+    part_pct_max: float
+    nombre: int
+    requiert_abf: bool
+    details: List[ServitudeDetailOut]
+
 
 class CommuneOut(Schema):
     code_insee: str
@@ -71,6 +85,7 @@ class ParcelleOut(Schema):
     avertissements: List[AvertissementOut]
     geometry: dict
     prescriptions: List[PrescriptionOut]
+    servitudes: List[ServitudeOut]
 
 
 class GeocodageOut(Schema):
@@ -160,6 +175,7 @@ def serialiser_parcelle(parcelle):
         "prescriptions": prescriptions,
         "avertissements": avertissements,
         "geometry": json.loads(parcelle.geom.geojson),
+        "servitudes": serialiser_servitudes(parcelle),
     }
 
 def serialiser_prescriptions(parcelle):
@@ -255,6 +271,25 @@ def construire_avertissements(parcelle, liens):
             "params": {"nombre": len({l.prescription.libelle for l in forts})},
         })
 
+    serv = parcelle.parcelleservitude_set.select_related("servitude")
+    if any(l.servitude.requiert_abf for l in serv):
+        messages.append({"code": "servitude_abf", "params": {}})
+    types_serv = {l.servitude.sup_type for l in serv}
+    if types_serv & {"PM1", "PM3"}:
+        messages.append({"code": "servitude_risque", "params": {}})
+
+    # Une même contrainte patrimoniale figure souvent dans les deux sources :
+    # au titre du PLU (prescription graphique) et au titre du code du
+    # patrimoine (servitude). Les fondements juridiques diffèrent, d'où
+    # le maintien des deux entrées.
+    presc_patrimoine = any(
+        "monument" in (l.prescription.libelle or "").lower()
+        or "patrimoine" in (l.prescription.libelle or "").lower()
+        for l in parcelle.parcelleprescription_set.select_related("prescription")
+    )
+    if presc_patrimoine and any(l.servitude.requiert_abf for l in serv):
+        messages.append({"code": "doublon_patrimoine", "params": {}})
+
     messages.append({"code": "source_officielle", "params": {}})
     return messages
 
@@ -343,3 +378,47 @@ def recherche_adresse(request, adresse: str, code_insee: str = None):
         })
 
     return {"geocodage": geo, "parcelle": sortie, "message": None}
+
+
+def serialiser_servitudes(parcelle):
+    """
+    Regroupe les servitudes par type. Une parcelle peut être couverte par
+    une douzaine de périmètres des abords distincts : l'obligation qui en
+    découle — l'avis de l'ABF — est la même pour tous. Les lister un par un
+    noierait des servitudes autrement plus contraignantes, comme un plan de
+    prévention des risques.
+    """
+    liens = parcelle.parcelleservitude_set.select_related("servitude")
+
+    groupes = {}
+    for lien in liens:
+        s = lien.servitude
+        cle = s.sup_type
+        if cle not in groupes:
+            groupes[cle] = {
+                "sup_type": cle,
+                "categorie": s.categorie_libelle,
+                "part_pct_max": 0.0,
+                "nombre": 0,
+                "requiert_abf": s.requiert_abf,
+                "details": [],
+            }
+        g = groupes[cle]
+        g["nombre"] += 1
+        # Le maximum, non la somme : les périmètres se recouvrent largement.
+        g["part_pct_max"] = max(g["part_pct_max"], lien.part_pct)
+        g["details"].append({
+            "nom": s.nom_litteral or s.type_assiette,
+            "type_assiette": s.type_assiette,
+            "part_pct": round(lien.part_pct, 1),
+        })
+
+    resultat = []
+    for g in groupes.values():
+        g["part_pct_max"] = 100.0 if g["part_pct_max"] >= 99 else round(g["part_pct_max"], 1)
+        g["details"].sort(key=lambda d: -d["part_pct"])
+        resultat.append(g)
+
+    # Les servitudes imposant un avis conforme passent devant.
+    resultat.sort(key=lambda g: (not g["requiert_abf"], -g["part_pct_max"]))
+    return resultat

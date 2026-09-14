@@ -359,8 +359,19 @@ class Prescription(models.Model):
     IMPACT_FORT = {"39", "01", "05", "25"}      # valeur chiffrée, change le volume
     IMPACT_PROCEDURE = {"07", "18", "17", "23"}  # autorisation ou programme imposé
 
+    # Le code typepsc 07 regroupe des contraintes de nature très différente :
+    # « Monument historique » impose une procédure, « Espace planté à conserver »
+    # retire de la surface constructible. Le libellé tranche.
+    MOTS_SURFACE = ("espace planté", "espace boisé", "espace vert",
+                    "à conserver", "emplacement réservé", "espace libre")
+
     @property
     def niveau_impact(self):
+        libelle = (self.libelle or "").lower()
+        if self.valeur_num is not None:
+            return "fort"
+        if any(m in libelle for m in self.MOTS_SURFACE):
+            return "fort"
         if self.type_psc in self.IMPACT_FORT:
             return "fort"
         if self.type_psc in self.IMPACT_PROCEDURE:
@@ -452,3 +463,128 @@ class ParcellePrescription(models.Model):
 
     def __str__(self):
         return f"{self.parcelle.idu} ∩ {self.prescription.libelle} ({self.part_pct:.0f}%)"
+
+
+class Servitude(models.Model):
+    """
+    Servitude d'utilité publique (SUP).
+
+    Contrairement aux prescriptions, une SUP ne dépend pas d'un document
+    d'urbanisme : elle est instituée par une autorité propre — préfecture,
+    ministère de la Culture, gestionnaire de réseau — et versée au GPU sous
+    sa propre partition, de la forme <SIREN>_SUP_<dép>_<type>.
+    """
+
+    # Nomenclature nationale des SUP, codes les plus fréquents.
+    CATEGORIES = {
+        "AC1": "Monuments historiques",
+        "AC2": "Sites inscrits et classés",
+        "AC4": "Aires de valorisation de l'architecture et du patrimoine",
+        "AS1": "Captages d'eau potable",
+        "EL3": "Halage et marchepied",
+        "EL7": "Alignement des voies publiques",
+        "I1": "Canalisations d'hydrocarbures",
+        "I3": "Canalisations de gaz",
+        "I4": "Lignes électriques",
+        "INT1": "Cimetières",
+        "PM1": "Plans de prévention des risques naturels",
+        "PM3": "Plans de prévention des risques technologiques",
+        "PT1": "Transmissions radioélectriques",
+        "PT2": "Centres radioélectriques",
+        "PT3": "Communications téléphoniques",
+        "T1": "Voies ferrées",
+        "T5": "Servitudes aéronautiques",
+        "T7": "Installations hors des zones de dégagement",
+    }
+
+    partition = models.CharField(
+        max_length=64,
+        db_index=True,
+        help_text="Partition propre à la SUP, ex: 172014607_SUP_67_AC1",
+    )
+    gid_ign = models.IntegerField(db_index=True)
+
+    sup_type = models.CharField(
+        max_length=10,
+        db_index=True,
+        help_text="Code nomenclature, ex: AC1, PM1, I4",
+    )
+    id_assiette = models.CharField(max_length=100, blank=True)
+    id_generateur = models.CharField(max_length=100, blank=True)
+
+    nom_litteral = models.CharField(
+        max_length=300,
+        blank=True,
+        help_text="Nom de l'élément protégé ou de l'ouvrage générateur",
+    )
+    type_assiette = models.CharField(
+        max_length=150,
+        blank=True,
+        help_text="Ex: Périmètre des abords, Zone de protection",
+    )
+    mode_geometrie = models.CharField(max_length=100, blank=True)
+    parametre_calcul = models.FloatField(
+        null=True,
+        blank=True,
+        help_text="Rayon de la zone tampon en mètres, le cas échéant",
+    )
+
+    fichier_acte = models.CharField(
+        max_length=300,
+        blank=True,
+        help_text="Nom du PDF de l'acte instituant la servitude",
+    )
+
+    geom = models.MultiPolygonField(srid=4326, spatial_index=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    synced_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        verbose_name = "Servitude d'utilité publique"
+        verbose_name_plural = "Servitudes d'utilité publique"
+        ordering = ["sup_type", "nom_litteral"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["partition", "gid_ign"],
+                name="unique_servitude_ign",
+            )
+        ]
+
+    def __str__(self):
+        return f"{self.sup_type} — {self.nom_litteral or self.type_assiette}"
+
+    @property
+    def categorie_libelle(self):
+        return self.CATEGORIES.get(self.sup_type.upper(), "Autre servitude")
+
+    @property
+    def requiert_abf(self):
+        """Les servitudes patrimoniales imposent l'avis de l'ABF."""
+        return self.sup_type.upper() in {"AC1", "AC2", "AC4"}
+
+
+class ParcelleServitude(models.Model):
+    """Intersection parcelle × servitude, avec la part de surface grevée."""
+
+    parcelle = models.ForeignKey(Parcelle, on_delete=models.CASCADE)
+    servitude = models.ForeignKey(Servitude, on_delete=models.CASCADE)
+
+    surface_intersection_m2 = models.FloatField()
+    part_pct = models.FloatField()
+
+    computed_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Parcelle × Servitude"
+        verbose_name_plural = "Parcelles × Servitudes"
+        ordering = ["-part_pct"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["parcelle", "servitude"],
+                name="unique_parcelle_servitude",
+            )
+        ]
+
+    def __str__(self):
+        return f"{self.parcelle.idu} ∩ {self.servitude.sup_type} ({self.part_pct:.0f}%)"

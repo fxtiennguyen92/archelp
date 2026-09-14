@@ -105,6 +105,7 @@ class Command(BaseCommand):
         from apps.parcels import services
 
         total_liens, total_psc = 0, 0
+        total_serv = 0
         for parcelle in parcelles:
             total_liens += self._calculer_zones(parcelle)
             try:
@@ -112,6 +113,13 @@ class Command(BaseCommand):
             except services.ErreurSource as exc:
                 self.stdout.write(
                     self.style.WARNING(f"  prescriptions indisponibles : {exc}")
+                )
+            
+            try:
+                total_serv += services.calculer_servitudes(parcelle)
+            except services.ErreurSource as exc:
+                self.stdout.write(
+                    self.style.WARNING(f"  servitudes indisponibles : {exc}")
                 )
 
         self.stdout.write(self.style.SUCCESS(f"{total_liens} relations parcelle × zone."))

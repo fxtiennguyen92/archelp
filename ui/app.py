@@ -68,6 +68,10 @@ T = {
         "aucune_prescription": "Aucune prescription graphique relevée",
         "mesure_HT": "hors tout",
         "mesure_ET": "à l'égout de toiture",
+        "servitudes": "Servitudes d'utilité publique",
+        "servitude_nombre": "{n} périmètre(s)",
+        "abf_requis": "avis ABF requis",
+        "voir_detail": "Détail",
     },
     "en": {
         "titre": "ArcHelp — Urban planning lookup",
@@ -108,6 +112,10 @@ T = {
         "aucune_prescription": "No graphic prescription found",
         "mesure_HT": "overall height",
         "mesure_ET": "to the eaves",
+        "servitudes": "Servitudes d'utilité publique (public easements)",
+        "servitude_nombre": "{n} perimeter(s)",
+        "abf_requis": "ABF opinion required",
+        "voir_detail": "Details",
     },
     "de": {
         "titre": "ArcHelp — Bauleitplanung-Abfrage",
@@ -148,6 +156,54 @@ T = {
         "aucune_prescription": "Keine zeichnerische Festsetzung gefunden",
         "mesure_HT": "Gesamthöhe",
         "mesure_ET": "bis zur Traufe",
+        "servitudes": "Servitudes d'utilité publique (öffentliche Baulasten)",
+        "servitude_nombre": "{n} Perimeter",
+        "abf_requis": "ABF-Stellungnahme erforderlich",
+        "voir_detail": "Einzelheiten",
+    },
+    "vi": {
+        "titre": "ArcHelp — Tra cứu quy hoạch",
+        "sous_titre": "Quy định quy hoạch áp dụng cho một thửa đất (vùng Grand Est)",
+        "onglet_adresse": "Theo địa chỉ",
+        "onglet_idu": "Theo số thửa",
+        "champ_adresse": "Địa chỉ",
+        "aide_adresse": "ví dụ: 1 place Kléber, Strasbourg",
+        "champ_idu": "Số thửa cadastre (14 ký tự)",
+        "aide_idu": "ví dụ: 67043000010151",
+        "bouton": "Tra cứu",
+        "recherche": "Đang tra cứu…",
+        "parcelle": "Thửa đất",
+        "commune": "Commune",
+        "contenance": "Diện tích cadastre",
+        "zonage": "Zonage áp dụng",
+        "zone": "Zone",
+        "designation": "Mô tả",
+        "part": "Tỷ lệ",
+        "surface": "Diện tích",
+        "document": "Tài liệu",
+        "reglement": "Règlement",
+        "page": "trang",
+        "non_precisee": "không rõ trang",
+        "dominante": "chiếm ưu thế",
+        "avertissements": "Điểm cần lưu ý",
+        "aucun_resultat": "Không có kết quả",
+        "adresse_trouvee": "Địa chỉ xác định được",
+        "erreur_api": "API không phản hồi. Kiểm tra xem server Django đã chạy chưa.",
+        "ouvrir_pdf": "Mở règlement",
+        "page_precise": "trang {page} / {total}",
+        "page_inconnue_court": "không rõ trang",
+        "pdf_absent": "Chưa tải được PDF",
+        "prescriptions": "Prescriptions trên bản đồ quy hoạch",
+        "impact_fort": "Ràng buộc có số liệu",
+        "impact_procedure": "Thủ tục và chương trình",
+        "impact_contexte": "Bối cảnh pháp lý",
+        "aucune_prescription": "Không có prescription nào",
+        "mesure_HT": "hors tout — tới điểm cao nhất",
+        "mesure_ET": "à l'égout — tới mép mái",
+        "servitudes": "Servitudes d'utilité publique (hạn chế sử dụng đất)",
+        "servitude_nombre": "{n} périmètre",
+        "abf_requis": "cần ý kiến ABF",
+        "voir_detail": "Chi tiết",
     },
 }
 
@@ -162,6 +218,9 @@ AVERTISSEMENTS = {
         "de": "Keine Zonierung gefunden. Die Gemeinde unterliegt möglicherweise der "
               "nationalen Bauordnung (RNU), oder ihr Dokument ist nicht im Géoportail "
               "de l'Urbanisme veröffentlicht.",
+        "vi": "Không tìm thấy zonage. Commune có thể thuộc diện áp dụng Règlement "
+              "National d'Urbanisme (RNU), hoặc tài liệu chưa được đăng lên "
+              "Géoportail de l'Urbanisme.",
     },
     "multi_zones": {
         "fr": "Parcelle à cheval sur {nombre} zones : {detail}. Les règles diffèrent "
@@ -170,6 +229,8 @@ AVERTISSEMENTS = {
               "on which part of the land is concerned.",
         "de": "Das Flurstück erstreckt sich über {nombre} Zonen: {detail}. Je nach "
               "betroffenem Teil gelten unterschiedliche Vorschriften.",
+        "vi": "Thửa đất nằm trên {nombre} zone: {detail}. Quy định khác nhau tùy "
+              "phần đất.",
     },
     "documents_multiples": {
         "fr": "Les zones proviennent de documents d'urbanisme différents. "
@@ -178,6 +239,8 @@ AVERTISSEMENTS = {
               "town hall is essential.",
         "de": "Die Zonen stammen aus verschiedenen Bauleitplänen. Eine Prüfung im "
               "Rathaus ist unerlässlich.",
+        "vi": "Các zone thuộc những tài liệu quy hoạch khác nhau. Bắt buộc phải "
+              "xác minh tại mairie.",
     },
     "doublon_source": {
         "fr": "La source publique contient plusieurs documents opposables pour cette "
@@ -186,6 +249,8 @@ AVERTISSEMENTS = {
               "municipality. The applicable rule cannot be determined automatically.",
         "de": "Die öffentliche Quelle enthält mehrere rechtsverbindliche Dokumente für "
               "diese Gemeinde. Die geltende Regel lässt sich nicht automatisch bestimmen.",
+        "vi": "Nguồn dữ liệu công có nhiều tài liệu cùng hiệu lực cho commune này. "
+              "Không thể tự động xác định quy định nào áp dụng.",
     },
     "carte_communale": {
         "fr": "Commune couverte par une carte communale : elle ne délimite que les "
@@ -197,6 +262,9 @@ AVERTISSEMENTS = {
         "de": "Die Gemeinde ist durch eine carte communale abgedeckt, die nur bebaubare "
               "und nicht bebaubare Bereiche abgrenzt. Höhe, Abstand und Grundfläche "
               "richten sich nach der nationalen Bauordnung (RNU).",
+        "vi": "Commune áp dụng carte communale — chỉ phân định khu vực được xây và "
+              "không được xây. Chiều cao, khoảng lùi và emprise au sol theo "
+              "Règlement National d'Urbanisme (RNU).",
     },
     "psmv": {
         "fr": "Parcelle située dans un Plan de Sauvegarde et de Mise en Valeur "
@@ -209,6 +277,9 @@ AVERTISSEMENTS = {
               "(Denkmalschutzbereich). Denkmalschutzvorschriften haben Vorrang vor dem "
               "PLU; die Stellungnahme des Architecte des Bâtiments de France ist "
               "erforderlich.",
+        "vi": "Thửa đất nằm trong Plan de Sauvegarde et de Mise en Valeur (khu bảo "
+              "tồn). Quy định về di sản ưu tiên hơn PLU, và bắt buộc có ý kiến của "
+              "Architecte des Bâtiments de France (ABF).",
     },
     "page_inconnue": {
         "fr": "La source ne précise pas la page du règlement pour certaines zones : "
@@ -217,6 +288,8 @@ AVERTISSEMENTS = {
               "the full document.",
         "de": "Die Quelle gibt für einige Zonen die Seite der Vorschrift nicht an: das "
               "vollständige Dokument einsehen.",
+        "vi": "Nguồn dữ liệu không ghi rõ trang règlement cho một số zone: cần đọc "
+              "toàn bộ tài liệu.",
     },
     "geocodage_approximatif": {
         "fr": "Géocodage approximatif (score {score}, précision « {precision} »). "
@@ -225,6 +298,8 @@ AVERTISSEMENTS = {
               "The identified parcel may not match the address searched.",
         "de": "Ungenaue Geokodierung (Score {score}, Genauigkeit „{precision}“). "
               "Das ermittelte Flurstück entspricht möglicherweise nicht der Suchadresse.",
+        "vi": "Định vị địa chỉ không chính xác (điểm {score}, độ chính xác "
+              "« {precision} »). Thửa đất tìm được có thể không đúng địa chỉ cần tra.",
     },
     "source_officielle": {
         "fr": "Données issues du Géoportail de l'Urbanisme et du cadastre IGN. "
@@ -236,6 +311,8 @@ AVERTISSEMENTS = {
         "de": "Daten aus dem Géoportail de l'Urbanisme und dem IGN-Kataster. "
               "Bauvorschriften können sich ändern: vor jeder Planungsentscheidung beim "
               "Rathaus bestätigen lassen.",
+        "vi": "Dữ liệu từ Géoportail de l'Urbanisme và cadastre IGN. Règlement có "
+              "thể thay đổi: cần xác nhận với mairie trước khi quyết định thiết kế.",
     },
     "prescriptions_fortes": {
         "fr": "{nombre} prescription(s) graphique(s) affectent directement la "
@@ -244,6 +321,46 @@ AVERTISSEMENTS = {
               "on this land — see the table below.",
         "de": "{nombre} zeichnerische Festsetzung(en) wirken sich unmittelbar auf "
               "die Bebaubarkeit aus — siehe Tabelle unten.",
+        "vi": "{nombre} prescription trên bản đồ quy hoạch ảnh hưởng trực tiếp tới "
+              "khả năng xây dựng — xem bảng bên dưới.",
+    },
+    "servitude_abf": {
+        "fr": "Parcelle grevée d'une servitude patrimoniale : l'avis de "
+              "l'Architecte des Bâtiments de France est requis pour tout projet.",
+        "en": "The parcel is subject to a heritage easement: the opinion of the "
+              "Architecte des Bâtiments de France is required for any project.",
+        "de": "Das Flurstück unterliegt einer Denkmalschutzdienstbarkeit: für jedes "
+              "Vorhaben ist die Stellungnahme des Architecte des Bâtiments de France "
+              "erforderlich.",
+        "vi": "Thửa đất chịu servitude về di sản: mọi dự án đều cần ý kiến của "
+              "Architecte des Bâtiments de France (ABF).",
+    },
+    "servitude_risque": {
+        "fr": "Parcelle concernée par un plan de prévention des risques : des "
+              "prescriptions de construction spécifiques peuvent s'appliquer, voire "
+              "une inconstructibilité.",
+        "en": "The parcel falls within a risk prevention plan: specific building "
+              "requirements may apply, or the land may be unbuildable.",
+        "de": "Das Flurstück liegt in einem Risikovorsorgeplan: besondere "
+              "Bauauflagen oder ein Bauverbot können gelten.",
+        "vi": "Thửa đất nằm trong plan de prévention des risques: có thể có yêu cầu "
+              "xây dựng riêng, hoặc không được phép xây.",
+    },
+    "doublon_patrimoine": {
+        "fr": "Une même protection patrimoniale peut apparaître à la fois dans les "
+              "prescriptions graphiques du PLU et dans les servitudes d'utilité "
+              "publique. Les deux sont conservées : leurs fondements juridiques "
+              "diffèrent et les actes de référence ne sont pas les mêmes.",
+        "en": "The same heritage protection may appear both in the PLU's graphic "
+              "prescriptions and in the public easements. Both are kept: their legal "
+              "bases differ and the reference documents are not the same.",
+        "de": "Derselbe Denkmalschutz kann sowohl in den zeichnerischen Festsetzungen "
+              "des PLU als auch in den öffentlichen Baulasten erscheinen. Beide "
+              "bleiben erhalten: ihre Rechtsgrundlagen und Bezugsakte unterscheiden "
+              "sich.",
+        "vi": "Cùng một quy định bảo vệ di sản có thể xuất hiện ở cả prescription "
+              "của PLU lẫn servitude d'utilité publique. Cả hai đều được giữ: căn cứ "
+              "pháp lý khác nhau và văn bản tham chiếu cũng khác.",
     },
 }
 
@@ -371,6 +488,28 @@ def afficher_resultat(donnees, langue):
         st.warning(donnees.get("message") or t["aucun_resultat"])
         return
 
+    servitudes = parcelle.get("servitudes") or []
+    if servitudes:
+        st.subheader(t["servitudes"])
+        for s in servitudes:
+            couleur = "#8e44ad" if s["requiert_abf"] else "#7f8c8d"
+            badge = f" · <b>{t['abf_requis']}</b>" if s["requiert_abf"] else ""
+            couverture = "" if s["part_pct_max"] >= 100 else f" · {s['part_pct_max']:.0f} %"
+            st.markdown(
+                f"<div style='border-left:4px solid {couleur};padding-left:10px;"
+                f"margin-bottom:8px'>"
+                f"<b>{s['sup_type']}</b> — {s['categorie']}"
+                f"<span style='color:#888;font-size:0.85em'>{couverture}</span>"
+                f"{badge}</div>",
+                unsafe_allow_html=True,
+            )
+            if s["nombre"] > 1:
+                with st.expander(
+                    f"{t['voir_detail']} — {t['servitude_nombre'].format(n=s['nombre'])}"
+                ):
+                    for d in s["details"]:
+                        st.caption(f"{d['nom']} — {d['part_pct']:.1f} %")
+
     geo = donnees.get("geocodage")
     if geo:
         st.caption(f"{t['adresse_trouvee']} : {geo['label']}")
@@ -430,6 +569,23 @@ def afficher_resultat(donnees, langue):
             else:
                 st.warning(texte)
 
+def rechercher_adresse():
+    adresse = st.session_state.get("saisie_adresse", "").strip()
+    if not adresse:
+        return
+    donnees = appeler_api("/recherche", {"adresse": adresse})
+    st.session_state.resultat = donnees
+    st.session_state.erreur = None if donnees else "api"
+
+
+def rechercher_idu():
+    idu = st.session_state.get("saisie_idu", "").strip()
+    if not idu:
+        return
+    donnees = appeler_api(f"/parcelle/{idu}")
+    st.session_state.resultat = donnees
+    st.session_state.erreur = None if donnees else "api"
+
 
 def main():
     st.set_page_config(page_title="ArcHelp", page_icon="🏛", layout="wide")
@@ -441,12 +597,17 @@ def main():
     if "erreur" not in st.session_state:
         st.session_state.erreur = None
 
+    LANGUES = ["fr", "en", "de", "vi"]
+    NOMS = {"fr": "Français", "en": "English", "de": "Deutsch", "vi": "Tiếng Việt"}
+
     with st.sidebar:
-        st.session_state.langue = st.radio(
-            "Langue / Language / Sprache",
-            options=["fr", "en", "de"],
-            format_func=lambda x: {"fr": "Français", "en": "English", "de": "Deutsch"}[x],
-            index=["fr", "en", "de"].index(st.session_state.langue),
+        # Le widget gère lui-même son état via `key` : réaffecter
+        # st.session_state ici ferait perdre le premier clic.
+        st.radio(
+            "Langue / Language / Sprache / Ngôn ngữ",
+            options=LANGUES,
+            format_func=lambda x: NOMS[x],
+            key="langue",
         )
 
     langue = st.session_state.langue
@@ -458,27 +619,28 @@ def main():
     onglet1, onglet2 = st.tabs([t["onglet_adresse"], t["onglet_idu"]])
 
     with onglet1:
-        adresse = st.text_input(t["champ_adresse"], placeholder=t["aide_adresse"],
-                                key="saisie_adresse")
-        if st.button(t["bouton"], key="btn_adresse", type="primary") and adresse:
-            with st.spinner(t["recherche"]):
-                donnees = appeler_api("/recherche", {"adresse": adresse})
-            # Le résultat est mémorisé : Streamlit réexécute tout le script
-            # à chaque interaction, y compris au rendu de la carte.
-            st.session_state.resultat = donnees
-            st.session_state.erreur = None if donnees else t["erreur_api"]
+        st.text_input(
+            t["champ_adresse"],
+            placeholder=t["aide_adresse"],
+            key="saisie_adresse",
+            on_change=rechercher_adresse,
+        )
+        if st.button(t["bouton"], key="btn_adresse", type="primary"):
+            rechercher_adresse()
 
     with onglet2:
-        idu = st.text_input(t["champ_idu"], placeholder=t["aide_idu"],
-                            max_chars=14, key="saisie_idu")
-        if st.button(t["bouton"], key="btn_idu", type="primary") and idu:
-            with st.spinner(t["recherche"]):
-                donnees = appeler_api(f"/parcelle/{idu.strip()}")
-            st.session_state.resultat = donnees
-            st.session_state.erreur = None if donnees else t["erreur_api"]
+        st.text_input(
+            t["champ_idu"],
+            placeholder=t["aide_idu"],
+            max_chars=14,
+            key="saisie_idu",
+            on_change=rechercher_idu,
+        )
+        if st.button(t["bouton"], key="btn_idu", type="primary"):
+            rechercher_idu()
 
-    if st.session_state.erreur:
-        st.error(st.session_state.erreur)
+    if st.session_state.erreur == "api":
+        st.error(t["erreur_api"])
     elif st.session_state.resultat:
         afficher_resultat(st.session_state.resultat, langue)
 

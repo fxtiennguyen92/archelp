@@ -118,12 +118,18 @@ def calculer_zones(parcelle):
         aire_commune=Area(Transform(Intersection("geom", parcelle.geom), 2154))
     )
 
+    # Le seuil de bruit doit rester proportionné : sur une parcelle technique
+    # de 1 m² — poteau, borne, reliquat de division — un seuil fixe écarterait
+    # la totalité des intersections.
+    reference = parcelle.contenance_m2 or 0
+    seuil = min(SEUIL_BRUIT_M2, max(0.01, reference * 0.01))
+
     resultats = []
     for zone in candidates:
         if zone.aire_commune is None:
             continue
         m2 = zone.aire_commune.sq_m
-        if m2 < SEUIL_BRUIT_M2:
+        if m2 < seuil:
             continue
         resultats.append((zone, m2))
 
@@ -172,12 +178,13 @@ def parcelle_par_point(lon, lat, force=False):
     parcelle = enregistrer_parcelle(features[0])
     if parcelle:
         calculer_zones(parcelle)
-        try:
-            calculer_prescriptions(parcelle)
-        except ErreurSource:
-            # Les prescriptions sont un complément : leur absence ne doit
-            # pas faire échouer la consultation du zonage.
-            pass
+        for fonction in (calculer_prescriptions, calculer_servitudes):
+            try:
+                fonction(parcelle)
+            except ErreurSource:
+                # Compléments : leur indisponibilité ne doit pas faire
+                # échouer la consultation du zonage.
+                pass
     return parcelle, True
 
 
@@ -202,6 +209,13 @@ def parcelle_par_idu(idu, force=False):
     parcelle = enregistrer_parcelle(features[0])
     if parcelle:
         calculer_zones(parcelle)
+        for fonction in (calculer_prescriptions, calculer_servitudes):
+            try:
+                fonction(parcelle)
+            except ErreurSource:
+                # Compléments : leur indisponibilité ne doit pas faire
+                # échouer la consultation du zonage.
+                pass
     return parcelle, True
 
 API_BAN = "https://api-adresse.data.gouv.fr/search/"
@@ -399,3 +413,126 @@ def calculer_prescriptions(parcelle):
             )
 
     return len(resultats)
+
+
+API_SERVITUDE = "https://apicarto.ign.fr/api/gpu/assiette-sup-s"
+
+SEUIL_SERVITUDE_M2 = 10.0
+
+
+def reparer_encodage(texte):
+    """
+    Le GPU renvoie certains libellés encodés deux fois en UTF-8 :
+    « é » devient « Ã© ». On rétablit la chaîne quand la double
+    conversion réussit, et on laisse le texte intact sinon — le défaut
+    peut être corrigé côté source à tout moment.
+    """
+    if not texte:
+        return ""
+    try:
+        return texte.encode("latin-1").decode("utf-8")
+    except (UnicodeEncodeError, UnicodeDecodeError):
+        return texte
+
+
+def appeler_servitudes(geom_geojson, tentatives=3):
+    derniere = None
+    for essai in range(tentatives):
+        try:
+            reponse = requests.get(
+                API_SERVITUDE,
+                params={"geom": json.dumps(geom_geojson)},
+                timeout=TIMEOUT,
+            )
+            reponse.raise_for_status()
+            return reponse.json().get("features") or []
+        except (requests.RequestException, ValueError) as exc:
+            derniere = exc
+            if essai < tentatives - 1:
+                time.sleep(2 ** essai)
+    raise ErreurSource(f"API Servitudes injoignable : {derniere}")
+
+
+def calculer_servitudes(parcelle):
+    """
+    Récupère les servitudes d'utilité publique grevant la parcelle.
+
+    À la différence du zonage et des prescriptions, les SUP ne dépendent
+    d'aucun document d'urbanisme : une commune sans PLU peut en supporter.
+    """
+    from django.contrib.gis.db.models.functions import Area, Intersection, Transform
+    from apps.parcels.models import ParcelleServitude, Servitude
+
+    features = appeler_servitudes(json.loads(parcelle.geom.geojson))
+    if not features:
+        return 0
+
+    maintenant = timezone.now()
+    objets = []
+
+    for feat in features:
+        props = feat["properties"]
+        partition = (props.get("partition") or "").strip()
+        gid = props.get("gid")
+        if not partition or gid is None:
+            continue
+
+        geom = en_multipolygone(feat.get("geometry"))
+        if geom is None:
+            continue
+
+        param = props.get("paramcalc")
+        try:
+            param = float(param) if param is not None else None
+        except (TypeError, ValueError):
+            param = None
+
+        serv, _ = Servitude.objects.update_or_create(
+            partition=partition,
+            gid_ign=gid,
+            defaults={
+                "sup_type": (props.get("suptype") or "")[:10].upper(),
+                "id_assiette": (props.get("idass") or "")[:100],
+                "id_generateur": (props.get("idgen") or "")[:100],
+                "nom_litteral": reparer_encodage(props.get("nomsuplitt"))[:300],
+                "type_assiette": reparer_encodage(props.get("typeass"))[:150],
+                "mode_geometrie": reparer_encodage(props.get("modegeoass"))[:100],
+                "parametre_calcul": param,
+                "fichier_acte": (props.get("fichier") or "")[:300],
+                "geom": geom,
+                "synced_at": maintenant,
+            },
+        )
+        objets.append(serv)
+
+    if not objets:
+        return 0
+
+    with transaction.atomic():
+        ParcelleServitude.objects.filter(parcelle=parcelle).delete()
+
+        ids = [o.id for o in objets]
+        candidates = Servitude.objects.filter(id__in=ids).annotate(
+            aire_commune=Area(Transform(Intersection("geom", parcelle.geom), 2154))
+        )
+
+        base = parcelle.contenance_m2
+        if not base:
+            base = parcelle.geom.transform(2154, clone=True).area or 1
+
+        n = 0
+        for serv in candidates:
+            if serv.aire_commune is None:
+                continue
+            m2 = serv.aire_commune.sq_m
+            if m2 < SEUIL_SERVITUDE_M2:
+                continue
+            ParcelleServitude.objects.create(
+                parcelle=parcelle,
+                servitude=serv,
+                surface_intersection_m2=round(m2, 2),
+                part_pct=round(min(100.0, 100 * m2 / base), 2),
+            )
+            n += 1
+
+    return n
