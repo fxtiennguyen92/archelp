@@ -72,6 +72,9 @@ T = {
         "servitude_nombre": "{n} périmètre(s)",
         "abf_requis": "avis ABF requis",
         "voir_detail": "Détail",
+        "articles_zone": "Articles de la zone",
+        "articles_communs": "Dispositions communes à toutes les zones",
+        "page_inconnue_art": "page non déterminée",
     },
     "en": {
         "titre": "ArcHelp — Urban planning lookup",
@@ -116,6 +119,9 @@ T = {
         "servitude_nombre": "{n} perimeter(s)",
         "abf_requis": "ABF opinion required",
         "voir_detail": "Details",
+        "articles_zone": "Articles for this zone",
+        "articles_communs": "Provisions common to all zones",
+        "page_inconnue_art": "page not determined",
     },
     "de": {
         "titre": "ArcHelp — Bauleitplanung-Abfrage",
@@ -160,6 +166,9 @@ T = {
         "servitude_nombre": "{n} Perimeter",
         "abf_requis": "ABF-Stellungnahme erforderlich",
         "voir_detail": "Einzelheiten",
+        "articles_zone": "Artikel dieser Zone",
+        "articles_communs": "Für alle Zonen geltende Bestimmungen",
+        "page_inconnue_art": "Seite nicht ermittelt",
     },
     "vi": {
         "titre": "ArcHelp — Tra cứu quy hoạch",
@@ -204,6 +213,9 @@ T = {
         "servitude_nombre": "{n} périmètre",
         "abf_requis": "cần ý kiến ABF",
         "voir_detail": "Chi tiết",
+        "articles_zone": "Các article của zone",
+        "articles_communs": "Quy định chung cho mọi zone",
+        "page_inconnue_art": "chưa xác định trang",
     },
 }
 
@@ -595,6 +607,19 @@ def afficher_resultat(donnees, langue):
                 )
             elif z["fichier_reglement"]:
                 st.caption(f"📄 {z['fichier_reglement'].split('#')[0]} — {t['pdf_absent']}")
+
+            for cle, liste in (("articles_zone", z.get("articles") or []),
+                               ("articles_communs", z.get("articles_communs") or [])):
+                if not liste:
+                    continue
+                with st.expander(f"{t[cle]} ({len(liste)})"):
+                    for a in liste:
+                        etiquette = f"{a['numero']} — {a['titre']}".strip(" —")
+                        page = f"p.{a['page']}" if a["page"] else t["page_inconnue_art"]
+                        if a["url"]:
+                            st.markdown(f"[{etiquette}]({a['url']}) · {page}")
+                        else:
+                            st.markdown(f"{etiquette} · {page}")
 
     if parcelle["avertissements"]:
         st.subheader(t["avertissements"])

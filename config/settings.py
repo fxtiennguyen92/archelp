@@ -89,3 +89,6 @@ MEDIA_ROOT = BASE_DIR / "media"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 PUBLIC_BASE_URL = env("PUBLIC_BASE_URL", default="")
+
+OLLAMA_HOST = env("OLLAMA_HOST", default="http://localhost:11434")
+OLLAMA_MODEL = env("OLLAMA_MODEL", default="mistral")

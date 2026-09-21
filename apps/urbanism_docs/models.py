@@ -90,6 +90,16 @@ class ReglementDocument(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
     telecharge_at = models.DateTimeField(null=True, blank=True)
 
+    extraction_brute = models.JSONField(
+        null=True,
+        blank=True,
+        help_text="Fragments renvoyés par le modèle, avant construction de "
+        "l'arborescence. Conservé pour rejouer l'assemblage sans rappeler "
+        "le modèle.",
+    )
+    extraction_modele = models.CharField(max_length=50, blank=True)
+    extraction_at = models.DateTimeField(null=True, blank=True)
+
     class Meta:
         verbose_name = "Règlement (PDF)"
         verbose_name_plural = "Règlements (PDF)"

@@ -21,6 +21,13 @@ api = NinjaAPI(
 
 # ---------- Schémas ----------
 
+class ArticleOut(Schema):
+    numero: str
+    titre: str
+    page: Optional[int]
+    url: Optional[str]
+
+
 class ZoneOut(Schema):
     libelle: str
     libelle_long: str
@@ -30,12 +37,15 @@ class ZoneOut(Schema):
     est_dominante: bool
     fichier_reglement: str
     page_reglement: Optional[int]
+    source_page: Optional[str]
+    url_reglement: Optional[str]
+    reglement_nb_pages: Optional[int]
     document_idurba: str
     document_type: str
     date_approbation: Optional[str]
-    url_reglement: Optional[str]
-    reglement_nb_pages: Optional[int]
     geometry: Optional[dict]
+    articles: List[ArticleOut] = []
+    articles_communs: List[ArticleOut] = []
 
 
 class PrescriptionOut(Schema):
@@ -143,6 +153,8 @@ def serialiser_parcelle(parcelle):
             if z.page_reglement:
                 url_pdf = f"{url_pdf}#page={z.page_reglement}"
 
+        articles, communs = serialiser_articles(z, pdf)
+        
         zones.append({
             "libelle": z.libelle,
             "libelle_long": z.libelle_long,
@@ -159,6 +171,8 @@ def serialiser_parcelle(parcelle):
             "date_approbation": doc.date_approbation.isoformat()
                                 if doc.date_approbation else None,
             "geometry": self_geom_zone(z, parcelle),
+            "articles": articles,
+            "articles_communs": communs,
         })
 
     prescriptions = serialiser_prescriptions(parcelle)
@@ -241,6 +255,140 @@ def serialiser_prescriptions(parcelle):
 
     resultat.sort(key=lambda g: (ordre[g["niveau_impact"]], -g["part_pct"]))
     return resultat
+
+def trouver_pdf(zone):
+    """PDF de règlement correspondant à la zone, d'après nomfic si possible."""
+    doc = zone.document
+    nom = (zone.nom_fichier_reglement or "").split("#")[0]
+    pdf = None
+    if nom:
+        pdf = doc.reglements.filter(titre=nom).exclude(fichier="").first()
+    if pdf is None:
+        pdf = doc.reglements.filter(type_piece="REGLEMENT").exclude(fichier="").first()
+    return pdf
+
+
+def url_absolue(pdf, page=None):
+    """Lien ouvrable depuis le navigateur du client, à la page voulue."""
+    from django.conf import settings
+    if not (pdf and pdf.fichier):
+        return None
+    base = (settings.PUBLIC_BASE_URL or "").rstrip("/")
+    url = f"{base}{pdf.fichier.url}" if base else pdf.fichier.url
+    return f"{url}#page={page}" if page else url
+
+
+def page_de_zone(zone):
+    """
+    Page d'entrée dans le règlement. Priorité au nomfic du GPU, donnée
+    officielle ; à défaut, page du chapitre déduite du sommaire.
+    """
+    if zone.page_reglement:
+        return zone.page_reglement, "gpu"
+    s = (zone.sections.filter(type_fragment="CHAPITRE", page_debut__isnull=False)
+         .order_by("chemin").first()
+         or zone.sections.filter(type_fragment="TITRE", page_debut__isnull=False)
+         .order_by("chemin").first())
+    if s:
+        return s.page_debut, "structure"
+    return None, None
+
+
+def serialiser_articles(zone, pdf):
+    """
+    Articles propres à la zone, puis dispositions communes du règlement :
+    chaque article de zone y renvoie, les omettre amputerait la réponse.
+    """
+    from apps.urbanism_docs.models import ReglementSection
+
+    def dedoublonner(sections):
+        vus, sortie = set(), []
+        for s in sections:
+            cle = (s.numero, s.titre[:80], s.page_debut)
+            if cle in vus:
+                continue
+            vus.add(cle)
+            sortie.append({
+                "numero": s.numero,
+                "titre": s.titre,
+                "page": s.page_debut,
+                "url": url_absolue(pdf, s.page_debut),
+            })
+        return sortie
+
+    propres = zone.sections.filter(type_fragment="ARTICLE").order_by("chemin")
+    communs = []
+    if pdf:
+        communs = (ReglementSection.objects
+                   .filter(reglement=pdf, type_fragment="ARTICLE", zones__isnull=True)
+                   .order_by("chemin")[:40])
+    return dedoublonner(propres), dedoublonner(communs)
+
+
+def self_geom_zone(zone, parcelle):
+    """Seule la partie de la zone qui recouvre la parcelle."""
+    import json
+    try:
+        decoupe = zone.geom.intersection(parcelle.geom)
+    except Exception:
+        return None
+    if decoupe.empty:
+        return None
+    return json.loads(decoupe.geojson)
+
+
+def serialiser_parcelle(parcelle):
+    import json
+
+    liens = list(
+        parcelle.parcellezone_set.select_related("zone", "zone__document")
+        .order_by("-part_pct")
+    )
+
+    zones = []
+    for lien in liens:
+        z, doc = lien.zone, lien.zone.document
+        pdf = trouver_pdf(z)
+        page, source_page = page_de_zone(z)
+        articles, communs = serialiser_articles(z, pdf)
+
+        zones.append({
+            "libelle": z.libelle,
+            "libelle_long": z.libelle_long,
+            "type_zone": z.type_zone,
+            "part_pct": lien.part_pct,
+            "surface_m2": lien.surface_intersection_m2,
+            "est_dominante": lien.est_dominante,
+            "fichier_reglement": z.nom_fichier_reglement,
+            "page_reglement": page,
+            "source_page": source_page,
+            "url_reglement": url_absolue(pdf, page),
+            "reglement_nb_pages": pdf.nb_pages if pdf else None,
+            "document_idurba": doc.idurba,
+            "document_type": doc.type_document,
+            "date_approbation": doc.date_approbation.isoformat()
+                                if doc.date_approbation else None,
+            "geometry": self_geom_zone(z, parcelle),
+            "articles": articles,
+            "articles_communs": communs,
+        })
+
+    return {
+        "idu": parcelle.idu,
+        "section": parcelle.section,
+        "numero": parcelle.numero,
+        "contenance_m2": parcelle.contenance_m2,
+        "commune": {
+            "code_insee": parcelle.commune.code_insee,
+            "nom": parcelle.commune.nom,
+            "code_departement": parcelle.commune.code_departement,
+        },
+        "zones": zones,
+        "prescriptions": serialiser_prescriptions(parcelle),
+        "servitudes": serialiser_servitudes(parcelle),
+        "avertissements": construire_avertissements(parcelle, liens),
+        "geometry": json.loads(parcelle.geom.geojson),
+    }
 
 def construire_avertissements(parcelle, liens):
     """
@@ -444,18 +592,3 @@ def serialiser_servitudes(parcelle):
     resultat.sort(key=lambda g: (not g["requiert_abf"], -g["part_pct_max"]))
     return resultat
 
-
-def self_geom_zone(zone, parcelle):
-    """
-    Renvoie la seule partie de la zone qui recouvre la parcelle.
-    La zone entière peut couvrir des kilomètres carrés : l'envoyer
-    au navigateur serait inutilisable et très lourd.
-    """
-    import json
-    try:
-        decoupe = zone.geom.intersection(parcelle.geom)
-    except Exception:
-        return None
-    if decoupe.empty:
-        return None
-    return json.loads(decoupe.geojson)
