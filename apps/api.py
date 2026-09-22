@@ -46,6 +46,7 @@ class ZoneOut(Schema):
     geometry: Optional[dict]
     articles: List[ArticleOut] = []
     articles_communs: List[ArticleOut] = []
+    page_fin: Optional[int]
 
 
 class PrescriptionOut(Schema):
@@ -280,14 +281,14 @@ def url_absolue(pdf, page=None):
 
 def page_de_zone(zone):
     """
-    Page d'entrée dans le règlement. Seul le nomfic du GPU est utilisé :
-    la page déduite du sommaire s'est révélée non fiable (décalage appliqué
-    à tort aux intitulés lus dans le corps du texte). Désactivée en attendant
-    une méthode validée.
+    Renvoie (page de début, page de fin, source). Priorité au nomfic du GPU ;
+    à défaut, le chapitre repéré dans le corps du PDF, signalé comme tel.
     """
     if zone.page_reglement:
-        return zone.page_reglement, "gpu"
-    return None, None
+        return zone.page_reglement, None, "gpu"
+    if zone.page_chapitre_debut:
+        return zone.page_chapitre_debut, zone.page_chapitre_fin, "chapitre"
+    return None, None, None
 
 
 def serialiser_articles(zone, pdf):
@@ -345,7 +346,7 @@ def serialiser_parcelle(parcelle):
     for lien in liens:
         z, doc = lien.zone, lien.zone.document
         pdf = trouver_pdf(z)
-        page, source_page = page_de_zone(z)
+        page, page_fin, source_page = page_de_zone(z)
         # Désactivé : pages et rattachement issus du sommaire non validés
         # (comparaison au démonstrateur SOGEFI, septembre 2026).
         articles, communs = [], []
@@ -359,6 +360,7 @@ def serialiser_parcelle(parcelle):
             "est_dominante": lien.est_dominante,
             "fichier_reglement": z.nom_fichier_reglement,
             "page_reglement": page,
+            "page_fin": page_fin,
             "source_page": source_page,
             "url_reglement": url_absolue(pdf, page),
             "reglement_nb_pages": pdf.nb_pages if pdf else None,

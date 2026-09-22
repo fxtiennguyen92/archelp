@@ -183,6 +183,17 @@ class Zone(models.Model):
         help_text="Page extraite de nomfic. Point d'entrée dans le PDF.",
     )
 
+    page_chapitre_debut = models.IntegerField(
+        null=True, blank=True,
+        help_text="Début du chapitre de la zone, repéré dans le corps du PDF",
+    )
+    page_chapitre_fin = models.IntegerField(null=True, blank=True)
+    type_chapitre = models.CharField(
+        max_length=20, blank=True,
+        help_text="exact/forte, secteur/forte… — fiabilité de la détection",
+    )
+    chapitre_at = models.DateTimeField(null=True, blank=True)
+
     nb_polygones = models.IntegerField(
         default=1,
         help_text="Nombre de polygones fusionnés sous ce libellé",

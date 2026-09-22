@@ -58,6 +58,8 @@ T = {
         "adresse_trouvee": "Adresse localisée",
         "erreur_api": "L'API ne répond pas. Vérifiez que le serveur Django est démarré.",
         "ouvrir_pdf": "Ouvrir le règlement",
+        "chapitre_zone": "Chapitre de la zone : pages {debut}–{fin}",
+        "repere_auto": "Chapitre repéré automatiquement dans le PDF — à vérifier",
         "page_precise": "page {page} sur {total}",
         "page_inconnue_court": "page non précisée",
         "pdf_absent": "PDF non encore récupéré",
@@ -105,6 +107,8 @@ T = {
         "adresse_trouvee": "Address located",
         "erreur_api": "The API is not responding. Check that the Django server is running.",
         "ouvrir_pdf": "Open the regulation",
+        "chapitre_zone": "Zone chapter: pages {debut}–{fin}",
+        "repere_auto": "Chapter located automatically in the PDF — please verify",
         "page_precise": "page {page} of {total}",
         "page_inconnue_court": "page not specified",
         "pdf_absent": "PDF not yet retrieved",
@@ -152,6 +156,8 @@ T = {
         "adresse_trouvee": "Adresse lokalisiert",
         "erreur_api": "Die API antwortet nicht. Prüfen Sie, ob der Django-Server läuft.",
         "ouvrir_pdf": "Vorschrift öffnen",
+        "chapitre_zone": "Kapitel der Zone: Seiten {debut}–{fin}",
+        "repere_auto": "Kapitel automatisch im PDF ermittelt – bitte prüfen",
         "page_precise": "Seite {page} von {total}",
         "page_inconnue_court": "Seite nicht angegeben",
         "pdf_absent": "PDF noch nicht abgerufen",
@@ -190,7 +196,7 @@ T = {
         "part": "Tỷ lệ",
         "surface": "Diện tích",
         "document": "Tài liệu",
-        "reglement": "Règlement",
+        "reglement": "Quy định",
         "page": "trang",
         "non_precisee": "không rõ trang",
         "dominante": "chiếm ưu thế",
@@ -198,7 +204,9 @@ T = {
         "aucun_resultat": "Không có kết quả",
         "adresse_trouvee": "Địa chỉ xác định được",
         "erreur_api": "API không phản hồi. Kiểm tra xem server Django đã chạy chưa.",
-        "ouvrir_pdf": "Mở règlement",
+        "ouvrir_pdf": "Xem Quy định",
+        "chapitre_zone": "Chương của zone: trang {debut}–{fin}",
+        "repere_auto": "Chương được tìm tự động trong PDF — cần kiểm tra lại",
         "page_precise": "trang {page} / {total}",
         "page_inconnue_court": "không rõ trang",
         "pdf_absent": "Chưa tải được PDF",
@@ -485,78 +493,118 @@ def dessiner_carte(parcelle, t):
     return carte
 
 
+def afficher_zone(z, t):
+    """Carte de zone : libellé, part, document, lien vers le règlement."""
+    couleur = COULEURS.get(z["type_zone"], "#888888")
+    marque = f" · {t['dominante']}" if z["est_dominante"] else ""
+    st.markdown(
+        f"<div style='border-left:5px solid {couleur};padding-left:10px;"
+        f"margin-bottom:8px'>"
+        f"<b>{z['libelle']}</b> — {z['part_pct']:.1f} %{marque}<br>"
+        f"<span style='color:#666;font-size:0.9em'>"
+        f"{z['libelle_long'] or z['type_zone']}<br>"
+        f"{z['surface_m2']:.0f} m² · {z['document_type']} "
+        f"{z['date_approbation'] or ''}</span></div>",
+        unsafe_allow_html=True,
+    )
+
+    url = z.get("url_reglement")
+    if url:
+        page, fin = z.get("page_reglement"), z.get("page_fin")
+        total = z.get("reglement_nb_pages")
+        if page and fin:
+            detail = t["chapitre_zone"].format(debut=page, fin=fin)
+        elif page and total:
+            detail = t["page_precise"].format(page=page, total=total)
+        else:
+            detail = t["page_inconnue_court"]
+        st.link_button(
+            f"📄 {t['ouvrir_pdf']} — {detail}",
+            url if url.startswith("http") else f"{BASE}{url}",
+            use_container_width=True,
+        )
+        if z.get("source_page") == "chapitre":
+            st.caption(f"ℹ️ {t['repere_auto']}")
+    elif z["fichier_reglement"]:
+        st.caption(f"📄 {z['fichier_reglement'].split('#')[0]} — {t['pdf_absent']}")
+
+
+def afficher_prescriptions(prescriptions, t):
+    """Prescriptions graphiques, groupées par niveau d'impact."""
+    from html import escape
+
+    st.subheader(t["prescriptions"])
+    if not prescriptions:
+        st.caption(t["aucune_prescription"])
+        return
+
+    for niveau in ("fort", "procedure", "contexte"):
+        groupe = [p for p in prescriptions if p["niveau_impact"] == niveau]
+        if not groupe:
+            continue
+        # Le contexte est replié : il compte souvent le plus de lignes
+        # alors qu'il change rarement la conception.
+        with st.expander(f"{t['impact_' + niveau]} ({len(groupe)})",
+                         expanded=(niveau != "contexte")):
+            couleur = COULEURS_IMPACT[niveau]
+            for p in groupe:
+                nom = p["libelle"]
+                nom_court = nom if len(nom) <= 70 else nom[:67] + "…"
+                valeur = ""
+                if p["valeur"] is not None:
+                    mesure = p["reference_mesure"]
+                    suffixe = f" — {t['mesure_' + mesure]}" if mesure in ("HT", "ET") else ""
+                    valeur = (
+                        f"<br><b style='font-size:1.15em'>{p['valeur']:g} {p['unite']}</b>"
+                        f"<span style='color:#666'>{suffixe}</span>"
+                    )
+                couverture = (
+                    "" if p["part_pct"] >= 100
+                    else f" · {p['part_pct']:.0f} % ({p['surface_m2']:.0f} m²)"
+                )
+                st.markdown(
+                    f"<div title='{escape(nom)}' style='border-left:4px solid {couleur};"
+                    f"padding-left:10px;margin-bottom:10px'>"
+                    f"{escape(nom_court)}"
+                    f"<span style='color:#888;font-size:0.85em'>{couverture}</span>"
+                    f"{valeur}</div>",
+                    unsafe_allow_html=True,
+                )
+
+
+def afficher_servitudes(servitudes, t):
+    """Servitudes d'utilité publique, groupées par type."""
+    st.subheader(t["servitudes"])
+    if not servitudes:
+        st.caption("—")
+        return
+
+    for s in servitudes:
+        couleur = "#8e44ad" if s["requiert_abf"] else "#7f8c8d"
+        badge = f" · <b>{t['abf_requis']}</b>" if s["requiert_abf"] else ""
+        couverture = "" if s["part_pct_max"] >= 100 else f" · {s['part_pct_max']:.0f} %"
+        st.markdown(
+            f"<div style='border-left:4px solid {couleur};padding-left:10px;"
+            f"margin-bottom:8px'>"
+            f"<b>{s['sup_type']}</b> — {s['categorie']}"
+            f"<span style='color:#888;font-size:0.85em'>{couverture}</span>"
+            f"{badge}</div>",
+            unsafe_allow_html=True,
+        )
+        if s["nombre"] > 1:
+            with st.expander(f"{t['voir_detail']} — "
+                             f"{t['servitude_nombre'].format(n=s['nombre'])}"):
+                for d in s["details"]:
+                    st.caption(f"{d['nom']} — {d['part_pct']:.1f} %")
+
+
 def afficher_resultat(donnees, langue):
     t = T[langue]
     parcelle = donnees.get("parcelle")
 
-    prescriptions = parcelle.get("prescriptions") or []
-    if prescriptions:
-        st.subheader(t["prescriptions"])
-        for niveau in ("fort", "procedure", "contexte"):
-            groupe = [p for p in prescriptions if p["niveau_impact"] == niveau]
-            if not groupe:
-                continue
-
-            titre = t[f"impact_{niveau}"]
-            # Le contexte est replié : il compte souvent le plus de lignes
-            # alors qu'il change rarement la conception.
-            conteneur = st.expander(f"{titre} ({len(groupe)})",
-                                    expanded=(niveau != "contexte"))
-            with conteneur:
-                for p in groupe:
-                    couleur = COULEURS_IMPACT[niveau]
-                    valeur = ""
-                    if p["valeur"] is not None:
-                        mesure = p["reference_mesure"]
-                        suffixe = f" — {t['mesure_' + mesure]}" if mesure in ("HT", "ET") else ""
-                        valeur = (
-                            f"<br><b style='font-size:1.15em'>"
-                            f"{p['valeur']:g} {p['unite']}</b>"
-                            f"<span style='color:#666'>{suffixe}</span>"
-                        )
-                    couverture = (
-                        "" if p["part_pct"] >= 100
-                        else f" · {p['part_pct']:.0f} % ({p['surface_m2']:.0f} m²)"
-                    )
-
-                    nom = p["libelle"]
-                    nom_court = nom if len(nom) <= 70 else nom[:67] + "…"
-
-                    st.markdown(
-                        f"<div style='border-left:4px solid {couleur};"
-                        f"padding-left:10px;margin-bottom:10px' "
-                        f"title='{nom}'>"
-                        f"{nom_court}"
-                        f"<span style='color:#888;font-size:0.85em'>{couverture}</span>"
-                        f"{valeur}</div>",
-                        unsafe_allow_html=True,
-                    )
-    
     if parcelle is None:
         st.warning(donnees.get("message") or t["aucun_resultat"])
         return
-
-    servitudes = parcelle.get("servitudes") or []
-    if servitudes:
-        st.subheader(t["servitudes"])
-        for s in servitudes:
-            couleur = "#8e44ad" if s["requiert_abf"] else "#7f8c8d"
-            badge = f" · <b>{t['abf_requis']}</b>" if s["requiert_abf"] else ""
-            couverture = "" if s["part_pct_max"] >= 100 else f" · {s['part_pct_max']:.0f} %"
-            st.markdown(
-                f"<div style='border-left:4px solid {couleur};padding-left:10px;"
-                f"margin-bottom:8px'>"
-                f"<b>{s['sup_type']}</b> — {s['categorie']}"
-                f"<span style='color:#888;font-size:0.85em'>{couverture}</span>"
-                f"{badge}</div>",
-                unsafe_allow_html=True,
-            )
-            if s["nombre"] > 1:
-                with st.expander(
-                    f"{t['voir_detail']} — {t['servitude_nombre'].format(n=s['nombre'])}"
-                ):
-                    for d in s["details"]:
-                        st.caption(f"{d['nom']} — {d['part_pct']:.1f} %")
 
     geo = donnees.get("geocodage")
     if geo:
@@ -567,61 +615,29 @@ def afficher_resultat(donnees, langue):
     col2.metric(t["commune"], parcelle["commune"]["nom"])
     col3.metric(t["contenance"], f"{parcelle['contenance_m2'] or '—'} m²")
 
+    # En haut : la carte et le zonage, qui se lisent ensemble.
     gauche, droite = st.columns([3, 2])
-
     with gauche:
-        st_folium(dessiner_carte(parcelle, t), height=420, use_container_width=True,
+        st_folium(dessiner_carte(parcelle, t), height=460, use_container_width=True,
                   key=f"carte_{parcelle['idu']}", returned_objects=[])
-
     with droite:
         st.subheader(t["zonage"])
         if not parcelle["zones"]:
             st.info(t["aucun_resultat"])
         for z in parcelle["zones"]:
-            couleur = COULEURS.get(z["type_zone"], "#888888")
-            marque = f" · {t['dominante']}" if z["est_dominante"] else ""
-            st.markdown(
-                f"<div style='border-left:5px solid {couleur};padding-left:10px;"
-                f"margin-bottom:12px'>"
-                f"<b>{z['libelle']}</b> — {z['part_pct']:.1f} %{marque}<br>"
-                f"<span style='color:#666;font-size:0.9em'>"
-                f"{z['libelle_long'] or z['type_zone']}<br>"
-                f"{z['surface_m2']:.0f} m² · {z['document_type']} "
-                f"{z['date_approbation'] or ''}</span></div>",
-                unsafe_allow_html=True,
-            )
-            url = z.get("url_reglement")
-            if url:
-                total = z.get("reglement_nb_pages")
-                page = z.get("page_reglement")
-                if page and total:
-                    detail = t["page_precise"].format(page=page, total=total)
-                elif total:
-                    detail = f"{total} p. · {t['page_inconnue_court']}"
-                else:
-                    detail = t["page_inconnue_court"]
-                st.link_button(
-                    f"📄 {t['ouvrir_pdf']} — {detail}",
-                    url if url.startswith("http") else f"{BASE}{url}",
-                    use_container_width=True,
-                )
-            elif z["fichier_reglement"]:
-                st.caption(f"📄 {z['fichier_reglement'].split('#')[0]} — {t['pdf_absent']}")
+            afficher_zone(z, t)
 
-            for cle, liste in (("articles_zone", z.get("articles") or []),
-                               ("articles_communs", z.get("articles_communs") or [])):
-                if not liste:
-                    continue
-                with st.expander(f"{t[cle]} ({len(liste)})"):
-                    for a in liste:
-                        etiquette = f"{a['numero']} — {a['titre']}".strip(" —")
-                        page = f"p.{a['page']}" if a["page"] else t["page_inconnue_art"]
-                        if a["url"]:
-                            st.markdown(f"[{etiquette}]({a['url']}) · {page}")
-                        else:
-                            st.markdown(f"{etiquette} · {page}")
+    st.divider()
+
+    # En dessous : les contraintes complémentaires.
+    bas_gauche, bas_droite = st.columns([3, 2])
+    with bas_gauche:
+        afficher_prescriptions(parcelle.get("prescriptions") or [], t)
+    with bas_droite:
+        afficher_servitudes(parcelle.get("servitudes") or [], t)
 
     if parcelle["avertissements"]:
+        st.divider()
         st.subheader(t["avertissements"])
         for av in parcelle["avertissements"]:
             texte = traduire_avertissement(av, langue)
@@ -665,7 +681,7 @@ def main():
         # Le widget gère lui-même son état via `key` : réaffecter
         # st.session_state ici ferait perdre le premier clic.
         st.radio(
-            "Langue / Language / Sprache / Ngôn ngữ",
+            "Languages",
             options=LANGUES,
             format_func=lambda x: NOMS[x],
             key="langue",
