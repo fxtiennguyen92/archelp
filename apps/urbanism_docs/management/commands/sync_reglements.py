@@ -205,6 +205,7 @@ class Command(BaseCommand):
             defaults={
                 **valeurs,
                 "nb_pages": jumeau.nb_pages if jumeau else self._compter_pages(contenu),
+                "est_numerise": jumeau.est_numerise if jumeau else self._est_numerise(contenu),
             },
         )
 
@@ -224,6 +225,22 @@ class Command(BaseCommand):
                 return len(pdf.pages)
         except Exception:
             return None
+
+    @staticmethod
+    def _est_numerise(contenu):
+        """
+        PDF numérisé sans couche texte : les étapes suivantes ne peuvent pas
+        le lire. Le repérer dès le téléchargement évite qu'un document neuf
+        reste avec une valeur vide et soit ignoré sans bruit.
+        """
+        try:
+            import pdfplumber
+            with pdfplumber.open(io.BytesIO(contenu)) as pdf:
+                n = min(5, len(pdf.pages))
+                texte = "".join((pdf.pages[i].extract_text() or "") for i in range(n))
+            return len(texte.strip()) < 300
+        except Exception:
+            return True
 
     @staticmethod
     def _resoudre_url(partition, tentatives=3):
