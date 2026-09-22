@@ -11,6 +11,7 @@ le PDF voulu, soit quelques Mo au lieu de plusieurs Go.
 """
 
 import hashlib
+import io
 import re
 import time
 from pathlib import Path
@@ -55,8 +56,7 @@ class Command(BaseCommand):
         else:
             raise CommandError("Précisez --region ou --partition.")
 
-        # Les cartes communales n'ont pas de règlement écrit : leurs archives
-        # ne contiennent que rapport de présentation, annexes et procédure.
+        # Les cartes communales n'ont pas de règlement écrit.
         qs = qs.exclude(type_document="CC")
 
         if not options["force"]:
@@ -77,7 +77,7 @@ class Command(BaseCommand):
 
         for i, doc in enumerate(documents, 1):
             try:
-                resultat = self._traiter(doc, options["force"])
+                resultat = self._traiter(doc)
             except Exception as exc:
                 stats["erreurs"] += 1
                 self.stdout.write(self.style.ERROR(f"  {doc.partition} : {exc}"))
@@ -101,25 +101,20 @@ class Command(BaseCommand):
 
             time.sleep(PAUSE)
 
-        self.stdout.write(
-            self.style.SUCCESS(
-                f"\nTerminé : {stats['ok']} règlements, {stats['octets']/1e6:.0f} Mo."
-            )
-        )
+        self.stdout.write(self.style.SUCCESS(
+            f"\nTerminé : {stats['ok']} règlements, {stats['octets']/1e6:.0f} Mo."
+        ))
         if stats["sans_reglement"]:
-            self.stdout.write(
-                self.style.WARNING(f"{stats['sans_reglement']} sans règlement écrit.")
-            )
+            self.stdout.write(self.style.WARNING(
+                f"{stats['sans_reglement']} sans règlement écrit."
+            ))
         if stats["erreurs"]:
             self.stdout.write(self.style.ERROR(f"{stats['erreurs']} erreurs."))
 
-    def _traiter(self, doc, force):
-        from apps.urbanism_docs.models import ReglementDocument
-
+    def _traiter(self, doc):
         url_zip = self._resoudre_url(doc.partition)
 
-        # Nom attendu d'après le champ nomfic du zonage : c'est la source
-        # la plus fiable quand elle existe (18 à 21 % des zones).
+        # Nom attendu d'après le champ nomfic du zonage, quand il existe.
         attendus = {
             z.nom_fichier_reglement.split("#")[0]
             for z in doc.zones.all()
@@ -127,9 +122,7 @@ class Command(BaseCommand):
         }
 
         with RemoteZip(url_zip) as archive:
-            entrees = archive.namelist()
-            cibles = self._choisir(entrees, attendus)
-
+            cibles = self._choisir(archive.namelist(), attendus)
             if not cibles:
                 return 0
 
@@ -137,30 +130,25 @@ class Command(BaseCommand):
             for chemin in cibles:
                 info = archive.getinfo(chemin)
                 if info.file_size > TAILLE_MAX_PDF:
-                    self.stdout.write(
-                        self.style.WARNING(
-                            f"  {doc.partition} : {Path(chemin).name} ignoré "
-                            f"({info.file_size/1e6:.0f} Mo)"
-                        )
-                    )
+                    self.stdout.write(self.style.WARNING(
+                        f"  {doc.partition} : {Path(chemin).name} ignoré "
+                        f"({info.file_size/1e6:.0f} Mo)"
+                    ))
                     continue
-
                 with archive.open(chemin) as flux:
                     contenu = flux.read()
-
                 self._enregistrer(doc, url_zip, chemin, contenu)
                 octets += len(contenu)
 
         return octets
 
-        def _choisir(self, entrees, attendus):
+    def _choisir(self, entrees, attendus):
         """
-        Sélectionne les PDF de règlement écrit.
-        Le filtre porte sur le nom de fichier, jamais sur le chemin :
-        le dossier s'appelle « 3_Reglement », ce qui ferait passer les
-        prescriptions et le règlement graphique pour du règlement écrit.
-        Les exclusions s'appliquent aussi aux noms tirés de nomfic :
-        certaines zones y renvoient au règlement graphique.
+        Sélectionne les PDF de règlement écrit. Le filtre porte sur le nom de
+        fichier, jamais sur le chemin : le dossier s'appelle « 3_Reglement »,
+        ce qui ferait passer prescriptions et règlement graphique pour du
+        règlement écrit. Les exclusions valent aussi pour les noms tirés de
+        nomfic : certaines zones y renvoient au règlement graphique.
         """
         def acceptable(chemin):
             nom = Path(chemin).name.lower()
@@ -186,7 +174,7 @@ class Command(BaseCommand):
             candidats.append(entree)
         return candidats
 
-        def _enregistrer(self, doc, url_zip, chemin, contenu):
+    def _enregistrer(self, doc, url_zip, chemin, contenu):
         from apps.urbanism_docs.models import ReglementDocument
 
         nom = Path(chemin).name
@@ -203,9 +191,8 @@ class Command(BaseCommand):
             "telecharge_at": timezone.now(),
         }
 
-        # Une même partition peut porter plusieurs DocumentUrbanisme
-        # (doublons de la source conservés volontairement). Le PDF, lui,
-        # est identique : on réutilise le fichier déjà sur disque.
+        # Plusieurs DocumentUrbanisme d'une même partition partagent le même
+        # PDF : on réutilise le fichier déjà sur disque.
         jumeau = (
             ReglementDocument.objects.filter(sha256=sha)
             .exclude(fichier="")
@@ -231,7 +218,6 @@ class Command(BaseCommand):
 
     @staticmethod
     def _compter_pages(contenu):
-        import io
         try:
             import pdfplumber
             with pdfplumber.open(io.BytesIO(contenu)) as pdf:

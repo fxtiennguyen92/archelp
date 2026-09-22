@@ -280,17 +280,13 @@ def url_absolue(pdf, page=None):
 
 def page_de_zone(zone):
     """
-    Page d'entrée dans le règlement. Priorité au nomfic du GPU, donnée
-    officielle ; à défaut, page du chapitre déduite du sommaire.
+    Page d'entrée dans le règlement. Seul le nomfic du GPU est utilisé :
+    la page déduite du sommaire s'est révélée non fiable (décalage appliqué
+    à tort aux intitulés lus dans le corps du texte). Désactivée en attendant
+    une méthode validée.
     """
     if zone.page_reglement:
         return zone.page_reglement, "gpu"
-    s = (zone.sections.filter(type_fragment="CHAPITRE", page_debut__isnull=False)
-         .order_by("chemin").first()
-         or zone.sections.filter(type_fragment="TITRE", page_debut__isnull=False)
-         .order_by("chemin").first())
-    if s:
-        return s.page_debut, "structure"
     return None, None
 
 
@@ -350,7 +346,9 @@ def serialiser_parcelle(parcelle):
         z, doc = lien.zone, lien.zone.document
         pdf = trouver_pdf(z)
         page, source_page = page_de_zone(z)
-        articles, communs = serialiser_articles(z, pdf)
+        # Désactivé : pages et rattachement issus du sommaire non validés
+        # (comparaison au démonstrateur SOGEFI, septembre 2026).
+        articles, communs = [], []
 
         zones.append({
             "libelle": z.libelle,
