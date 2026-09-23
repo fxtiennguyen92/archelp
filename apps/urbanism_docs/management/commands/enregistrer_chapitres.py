@@ -24,12 +24,22 @@ FAMILLES = {"U", "AU", "A", "N"}
 TYPES_RETENUS = {"exact", "secteur"}
 
 
-def qualifier(zone, ch):
+def qualifier(zone, ch, libelles_document):
+    """
+    « exact »   : le chapitre nomme la zone elle-même.
+    « secteur » : la zone est un secteur d'un libellé nommé par le chapitre —
+                  y compris quand ce libellé est « N » ou « A », dès lors qu'il
+                  existe comme zone du document et non comme simple famille.
+    « famille » : le chapitre ne cite qu'un genre de zone (« zones agricoles »).
+    """
     cz = canon(zone.libelle)
     libs = ch["libelles"]
     if cz in libs:
         t = "exact"
-    elif any(cz.startswith(l) and l not in FAMILLES for l in libs):
+    elif any(
+        cz != l and cz.startswith(l) and (l not in FAMILLES or l in libelles_document)
+        for l in libs
+    ):
         t = "secteur"
     else:
         t = "famille"
@@ -86,6 +96,7 @@ class Command(BaseCommand):
 
             zones = list(regl.document.zones.all())
             chapitres = detecter(pages, zones)
+            libelles_document = {canon(z.libelle) for z in zones}
 
             for z in zones:
                 # Si nomfic désigne un autre PDF du document, ce n'est pas le bon.
@@ -97,7 +108,7 @@ class Command(BaseCommand):
                     stats["sans_chapitre"] += 1
                     Zone.objects.filter(pk=z.pk).update(chapitre_at=maintenant)
                     continue
-                t = qualifier(z, ch)
+                t = qualifier(z, ch, libelles_document)
                 if t.split("/")[0] not in TYPES_RETENUS:
                     stats["ecarte_famille"] += 1
                     Zone.objects.filter(pk=z.pk).update(chapitre_at=maintenant)

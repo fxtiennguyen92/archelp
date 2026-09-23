@@ -92,3 +92,5 @@ PUBLIC_BASE_URL = env("PUBLIC_BASE_URL", default="")
 
 OLLAMA_HOST = env("OLLAMA_HOST", default="http://localhost:11434")
 OLLAMA_MODEL = env("OLLAMA_MODEL", default="mistral")
+
+GEMINI_API_KEY = env("GEMINI_API_KEY", default="")

@@ -27,6 +27,22 @@ class ArticleOut(Schema):
     page: Optional[int]
     url: Optional[str]
 
+class RegleOut(Schema):
+    theme: str
+    valeur: str
+    condition: str
+    citation: str
+    page: Optional[int]
+    url: Optional[str]
+
+
+class GroupeReglesOut(Schema):
+    cle: str
+    libelle: str
+    nombre: int
+    a_valeurs: bool
+    regles: List[RegleOut]
+
 
 class ZoneOut(Schema):
     libelle: str
@@ -46,6 +62,10 @@ class ZoneOut(Schema):
     geometry: Optional[dict]
     articles: List[ArticleOut] = []
     articles_communs: List[ArticleOut] = []
+    resume: List[dict] = []
+    groupes_regles: List[GroupeReglesOut] = []
+    renvois: List[str] = []
+    couverture_regles: Optional[float] = None
     page_fin: Optional[int]
 
 
@@ -120,6 +140,60 @@ class RechercheOut(Schema):
 
 # ---------- Sérialisation ----------
 
+def serialiser_regles(zone, pdf):
+    """
+    Règles de la zone, groupées dans l'ordre où un architecte aborde un projet.
+    Renvoie aussi un résumé très court : une valeur par grand poste, choisie
+    parmi les règles sans condition — un chiffre sorti de sa condition
+    induirait en erreur, d'où l'avertissement qui l'accompagne à l'affichage.
+    """
+    from apps.urbanism_docs.models import RegleZone
+
+    lignes = list(zone.regles.select_related("extraction").order_by("groupe", "ordre"))
+    if not lignes:
+        return [], [], [], None
+
+    par_groupe = {}
+    for r in lignes:
+        par_groupe.setdefault(r.groupe, []).append({
+            "theme": r.theme,
+            "valeur": r.valeur,
+            "condition": r.condition,
+            "citation": r.citation,
+            "page": r.page,
+            "url": url_absolue(pdf, r.page),
+        })
+
+    groupes = []
+    for cle, libelle, _ in RegleZone.GROUPES:
+        lot = par_groupe.get(cle)
+        if not lot:
+            continue
+        groupes.append({
+            "cle": cle,
+            "libelle": libelle,
+            "nombre": len(lot),
+            "a_valeurs": any(x["valeur"] for x in lot),
+            "regles": lot,
+        })
+
+    # Résumé : une valeur n'y figure que si elle vaut sans condition et qu'elle
+    # est seule de son poste. « 8 mètres au-dessus de l'égout » affiché comme
+    # « 8 mètres » ferait concevoir un bâtiment trois fois trop bas.
+    resume = []
+    for cle in ("emprise", "hauteur", "implantation", "stationnement"):
+        lot = [x for x in par_groupe.get(cle, []) if x["valeur"]]
+        if not lot:
+            continue
+        etiquette = RegleZone.LIBELLE_GROUPE[cle]
+        if len(lot) == 1 and not lot[0]["condition"]:
+            resume.append({"poste": etiquette, "valeur": lot[0]["valeur"], "sur": True})
+        else:
+            resume.append({"poste": etiquette, "valeur": f"{len(lot)}", "sur": False})
+
+    extraction = lignes[0].extraction
+    return resume, groupes, (extraction.renvois or []), extraction.couverture
+
 def serialiser_parcelle(parcelle):
     import json
 
@@ -144,17 +218,13 @@ def serialiser_parcelle(parcelle):
                 type_piece="REGLEMENT"
             ).exclude(fichier="").first()
 
-        url_pdf = None
-        if pdf and pdf.fichier:
-            from django.conf import settings
-            # URL absolue : le lien doit être ouvrable depuis le navigateur
-            # du client, quel que soit le service qui appelle l'API.
-            base = (settings.PUBLIC_BASE_URL or "").rstrip("/")
-            url_pdf = f"{base}{pdf.fichier.url}" if base else pdf.fichier.url
-            if z.page_reglement:
-                url_pdf = f"{url_pdf}#page={z.page_reglement}"
+        page, page_fin, source_page = page_de_zone(z)
+        url_pdf = url_absolue(pdf, page)
 
-        articles, communs = serialiser_articles(z, pdf)
+        # Désactivé : pages et rattachement issus du sommaire non validés
+        # (comparaison au démonstrateur SOGEFI). Les règles extraites les remplacent.
+        articles, communs = [], []
+        resume, groupes_regles, renvois, couverture = serialiser_regles(z, pdf)
         
         zones.append({
             "libelle": z.libelle,
@@ -164,7 +234,9 @@ def serialiser_parcelle(parcelle):
             "surface_m2": lien.surface_intersection_m2,
             "est_dominante": lien.est_dominante,
             "fichier_reglement": z.nom_fichier_reglement,
-            "page_reglement": z.page_reglement,
+            "page_reglement": page,
+            "page_fin": page_fin,
+            "source_page": source_page,
             "url_reglement": url_pdf,
             "reglement_nb_pages": pdf.nb_pages if pdf else None,
             "document_idurba": doc.idurba,
@@ -174,6 +246,10 @@ def serialiser_parcelle(parcelle):
             "geometry": self_geom_zone(z, parcelle),
             "articles": articles,
             "articles_communs": communs,
+            "resume": resume,
+            "groupes_regles": groupes_regles,
+            "renvois": renvois,
+            "couverture_regles": couverture,
         })
 
     prescriptions = serialiser_prescriptions(parcelle)
@@ -333,63 +409,6 @@ def self_geom_zone(zone, parcelle):
         return None
     return json.loads(decoupe.geojson)
 
-
-def serialiser_parcelle(parcelle):
-    import json
-
-    liens = list(
-        parcelle.parcellezone_set.select_related("zone", "zone__document")
-        .order_by("-part_pct")
-    )
-
-    zones = []
-    for lien in liens:
-        z, doc = lien.zone, lien.zone.document
-        pdf = trouver_pdf(z)
-        page, page_fin, source_page = page_de_zone(z)
-        # Désactivé : pages et rattachement issus du sommaire non validés
-        # (comparaison au démonstrateur SOGEFI, septembre 2026).
-        articles, communs = [], []
-
-        zones.append({
-            "libelle": z.libelle,
-            "libelle_long": z.libelle_long,
-            "type_zone": z.type_zone,
-            "part_pct": lien.part_pct,
-            "surface_m2": lien.surface_intersection_m2,
-            "est_dominante": lien.est_dominante,
-            "fichier_reglement": z.nom_fichier_reglement,
-            "page_reglement": page,
-            "page_fin": page_fin,
-            "source_page": source_page,
-            "url_reglement": url_absolue(pdf, page),
-            "reglement_nb_pages": pdf.nb_pages if pdf else None,
-            "document_idurba": doc.idurba,
-            "document_type": doc.type_document,
-            "date_approbation": doc.date_approbation.isoformat()
-                                if doc.date_approbation else None,
-            "geometry": self_geom_zone(z, parcelle),
-            "articles": articles,
-            "articles_communs": communs,
-        })
-
-    return {
-        "idu": parcelle.idu,
-        "section": parcelle.section,
-        "numero": parcelle.numero,
-        "contenance_m2": parcelle.contenance_m2,
-        "commune": {
-            "code_insee": parcelle.commune.code_insee,
-            "nom": parcelle.commune.nom,
-            "code_departement": parcelle.commune.code_departement,
-        },
-        "zones": zones,
-        "prescriptions": serialiser_prescriptions(parcelle),
-        "servitudes": serialiser_servitudes(parcelle),
-        "avertissements": construire_avertissements(parcelle, liens),
-        "geometry": json.loads(parcelle.geom.geojson),
-    }
-
 def construire_avertissements(parcelle, liens):
     """
     Retourne des codes, pas des phrases : l'interface est trilingue
@@ -458,6 +477,25 @@ def construire_avertissements(parcelle, liens):
     )
     if presc_patrimoine and any(l.servitude.requiert_abf for l in serv):
         messages.append({"code": "doublon_patrimoine", "params": {}})
+
+    zones_avec_regles = [l.zone for l in liens if l.zone.regles.exists()]
+    if zones_avec_regles:
+        messages.append({"code": "regles_extraites", "params": {}})
+        faibles = [z for z in zones_avec_regles
+                   if any(r.extraction.couverture is not None and r.extraction.couverture < 0.9
+                          for r in z.regles.all()[:1])]
+        if faibles:
+            messages.append({"code": "regles_incompletes",
+                             "params": {"zones": ", ".join(z.libelle for z in faibles)}})
+        if any(l.zone.regles.filter(extraction__renvois__len__gt=0).exists() for l in liens):
+            messages.append({"code": "regles_renvois", "params": {}})
+        # Une seule zone documentée sur une parcelle qui en compte plusieurs est
+        # le cas le plus trompeur : le tableau ne vaut que pour une partie du terrain.
+        if len(liens) > 1:
+            messages.append({
+                "code": "regles_multi_zones",
+                "params": {"zones": ", ".join(z.libelle for z in zones_avec_regles)},
+            })
 
     messages.append({"code": "source_officielle", "params": {}})
     return messages

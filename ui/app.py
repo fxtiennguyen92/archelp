@@ -77,6 +77,15 @@ T = {
         "articles_zone": "Articles de la zone",
         "articles_communs": "Dispositions communes à toutes les zones",
         "page_inconnue_art": "page non déterminée",
+        "regles": "Règles du règlement",
+        "n_regles": "{n} règles",
+        "resume_valeurs": "Chaque valeur dépend de conditions : ouvrez le détail avant de l'utiliser",
+        "renvois": "Renvois vers d'autres textes",
+        "voir_citation": "Texte d'origine",
+        "ouvrir_page": "p. {page}",
+        "aucune_regle": "Aucune règle relevée automatiquement pour cette zone",
+        "couverture_regles": "Règles chiffrées relevées : {pct} %",
+        "notes_donnees": "Notes sur les données",
     },
     "en": {
         "titre": "ArcHelp — Urban planning lookup",
@@ -126,6 +135,15 @@ T = {
         "articles_zone": "Articles for this zone",
         "articles_communs": "Provisions common to all zones",
         "page_inconnue_art": "page not determined",
+        "regles": "Rules from the règlement",
+        "n_regles": "{n} rules",
+        "resume_valeurs": "Every value depends on conditions: open the details before using it",
+        "renvois": "References to other texts",
+        "voir_citation": "Original text",
+        "ouvrir_page": "p. {page}",
+        "aucune_regle": "No rules automatically extracted for this zone",
+        "couverture_regles": "Numerical rules extracted: {pct} %",
+        "notes_donnees": "Notes on the data",
     },
     "de": {
         "titre": "ArcHelp — Bauleitplanung-Abfrage",
@@ -175,6 +193,15 @@ T = {
         "articles_zone": "Artikel dieser Zone",
         "articles_communs": "Für alle Zonen geltende Bestimmungen",
         "page_inconnue_art": "Seite nicht ermittelt",
+        "regles": "Regeln des Règlement",
+        "n_regles": "{n} Regeln",
+        "resume_valeurs": "Jeder Wert hängt von Bedingungen ab: vor Gebrauch die Einzelheiten öffnen",
+        "renvois": "Verweise auf andere Texte",
+        "voir_citation": "Originaltext",
+        "ouvrir_page": "S. {page}",
+        "aucune_regle": "Für diese Zone wurden keine Regeln automatisch erfasst",
+        "couverture_regles": "Erfasste bezifferte Regeln: {pct} %",
+        "notes_donnees": "Hinweise zu den Daten",
     },
     "vi": {
         "titre": "ArcHelp — Tra cứu quy hoạch",
@@ -196,7 +223,7 @@ T = {
         "part": "Tỷ lệ",
         "surface": "Diện tích",
         "document": "Tài liệu",
-        "reglement": "Quy định",
+        "reglement": "Règlement",
         "page": "trang",
         "non_precisee": "không rõ trang",
         "dominante": "chiếm ưu thế",
@@ -204,7 +231,7 @@ T = {
         "aucun_resultat": "Không có kết quả",
         "adresse_trouvee": "Địa chỉ xác định được",
         "erreur_api": "API không phản hồi. Kiểm tra xem server Django đã chạy chưa.",
-        "ouvrir_pdf": "Xem Quy định",
+        "ouvrir_pdf": "Xem Règlement",
         "chapitre_zone": "Chương của zone: trang {debut}–{fin}",
         "repere_auto": "Chương được tìm tự động trong PDF — cần kiểm tra lại",
         "page_precise": "trang {page} / {total}",
@@ -224,6 +251,15 @@ T = {
         "articles_zone": "Các article của zone",
         "articles_communs": "Quy định chung cho mọi zone",
         "page_inconnue_art": "chưa xác định trang",
+        "regles": "Quy tắc trong Règlement",
+        "n_regles": "{n} quy tắc",
+        "resume_valeurs": "Mọi giá trị đều kèm điều kiện: mở chi tiết trước khi sử dụng",
+        "renvois": "Dẫn chiếu tới văn bản khác",
+        "voir_citation": "Nguyên văn",
+        "ouvrir_page": "tr. {page}",
+        "aucune_regle": "Chưa trích được quy tắc nào cho zone này",
+        "couverture_regles": "Quy tắc có số đã trích: {pct} %",
+        "notes_donnees": "Ghi chú về dữ liệu",
     },
 }
 
@@ -382,6 +418,50 @@ AVERTISSEMENTS = {
               "của PLU lẫn servitude d'utilité publique. Cả hai đều được giữ: căn cứ "
               "pháp lý khác nhau và văn bản tham chiếu cũng khác.",
     },
+    "regles_extraites": {
+        "fr": "Les valeurs présentées ont été relevées automatiquement dans le règlement. "
+              "Chaque ligne cite le texte d'origine et renvoie à sa page : vérifiez-les "
+              "avant toute décision de conception.",
+        "en": "The values shown were extracted automatically from the règlement. Each line "
+              "quotes the original text and links to its page: verify them before making "
+              "any design decision.",
+        "de": "Die angezeigten Werte wurden automatisch aus dem Règlement entnommen. Jede "
+              "Zeile zitiert den Originaltext und verweist auf die Seite: vor jeder "
+              "Planungsentscheidung prüfen.",
+        "vi": "Các giá trị hiển thị được trích tự động từ règlement. Mỗi dòng đều kèm trích "
+              "dẫn nguyên văn và link tới đúng trang: cần kiểm tra lại trước khi quyết định "
+              "thiết kế.",
+    },
+    "regles_incompletes": {
+        "fr": "Une partie des règles chiffrées n'a pas pu être relevée (zone {zones}). "
+              "La liste est incomplète : consultez le PDF.",
+        "en": "Some numerical rules could not be extracted (zone {zones}). The list is "
+              "incomplete: refer to the PDF.",
+        "de": "Ein Teil der bezifferten Regeln konnte nicht erfasst werden (Zone {zones}). "
+              "Die Liste ist unvollständig: bitte das PDF heranziehen.",
+        "vi": "Một phần quy tắc có số chưa trích được (zone {zones}). Danh sách chưa đầy đủ: "
+              "cần đọc PDF.",
+    },
+    "regles_renvois": {
+        "fr": "Le règlement renvoie à des dispositions situées ailleurs, qui ne figurent pas "
+              "dans cette liste : voir « renvois » sous les règles.",
+        "en": "The règlement refers to provisions located elsewhere, not included in this "
+              "list: see “renvois” below the rules.",
+        "de": "Das Règlement verweist auf Bestimmungen an anderer Stelle, die hier fehlen: "
+              "siehe „renvois“ unter den Regeln.",
+        "vi": "Règlement có dẫn chiếu tới quy định nằm ở chỗ khác, không có trong danh sách "
+              "này: xem mục « renvois » bên dưới.",
+    },
+    "regles_multi_zones": {
+        "fr": "Les règles ci-dessous ne concernent que la ou les zones {zones}. "
+              "Les autres parties du terrain relèvent de règles différentes.",
+        "en": "The rules below apply only to zone(s) {zones}. Other parts of the land "
+              "are governed by different rules.",
+        "de": "Die folgenden Regeln gelten nur für Zone(n) {zones}. Für die übrigen "
+              "Grundstücksteile gelten andere Regeln.",
+        "vi": "Các quy tắc bên dưới chỉ áp cho zone {zones}. Phần đất còn lại theo quy "
+              "định khác.",
+    },
 }
 
 COULEURS = {
@@ -529,6 +609,112 @@ def afficher_zone(z, t):
         st.caption(f"📄 {z['fichier_reglement'].split('#')[0]} — {t['pdf_absent']}")
 
 
+# Trois niveaux, par conséquence pour le projet :
+#   bloquant  — peut interdire de construire ou imposer un avis conforme
+#   attention — change la lecture du résultat sans l'invalider
+#   note      — porte sur la qualité de la donnée, replié par défaut
+NIVEAU_AVERTISSEMENT = {
+    "servitude_risque": "bloquant",
+    "servitude_abf": "bloquant",
+    "psmv": "bloquant",
+    "carte_communale": "bloquant",
+    "doublon_source": "bloquant",
+
+    "aucun_zonage": "attention",
+    "multi_zones": "attention",
+    "regles_multi_zones": "attention",
+    "prescriptions_fortes": "attention",
+    "documents_multiples": "attention",
+    "geocodage_approximatif": "attention",
+}
+
+
+def afficher_avertissements(avertissements, langue, t):
+    groupes = {"bloquant": [], "attention": [], "note": []}
+    for av in avertissements:
+        niveau = NIVEAU_AVERTISSEMENT.get(av["code"], "note")
+        groupes[niveau].append(traduire_avertissement(av, langue))
+
+    for texte in groupes["bloquant"]:
+        st.error(texte)
+    for texte in groupes["attention"]:
+        st.warning(texte)
+    if groupes["note"]:
+        # Repliées : ces notes disent comment la donnée a été obtenue, elles
+        # ne doivent pas concurrencer un avertissement qui peut bloquer le projet.
+        with st.expander(f"{t['notes_donnees']} ({len(groupes['note'])})"):
+            for texte in groupes["note"]:
+                st.caption(texte)
+
+
+def afficher_regles(z, t):
+    """Règles de la zone : postes chiffrés d'abord, le reste replié."""
+    from html import escape
+
+    groupes = z.get("groupes_regles") or []
+    if not groupes:
+        st.caption(t["aucune_regle"])
+        return
+
+    resume = z.get("resume") or []
+    if resume:
+        morceaux = []
+        for x in resume:
+            if x.get("sur"):
+                morceaux.append(f"{escape(x['poste'])} : <b>{escape(x['valeur'])}</b>")
+            else:
+                # Plusieurs règles ou une condition : on annonce le poste sans
+                # chiffre, le détail est juste en dessous.
+                morceaux.append(
+                    f"{escape(x['poste'])} : "
+                    f"<span style='opacity:0.75'>{t['n_regles'].format(n=x['valeur'])}</span>"
+                )
+        st.markdown(
+            "<div style='background:rgba(128,128,128,0.12);border-radius:6px;"
+            "padding:8px 12px;margin-bottom:10px'>"
+            + " &nbsp;·&nbsp; ".join(morceaux)
+            + f"<br><span style='color:#d9534f;font-size:0.8em'>⚠ {t['resume_valeurs']}</span></div>",
+            unsafe_allow_html=True,
+        )
+
+    couv = z.get("couverture_regles")
+    if couv is not None and couv < 0.9:
+        st.caption("⚠ " + t["couverture_regles"].format(pct=int(100 * couv)))
+
+    for g in groupes:
+        # Les postes chiffrés — emprise, hauteur, implantation — sont ceux
+        # qui déterminent le volume : ils s'ouvrent d'emblée.
+        with st.expander(f"{g['libelle']} ({g['nombre']})", expanded=False):
+            for r in g["regles"]:
+                entete = ""
+                if r["valeur"]:
+                    entete = f"<b style='font-size:1.1em'>{escape(r['valeur'])}</b>"
+                if r["condition"]:
+                    sep = " — " if entete else ""
+                    entete += f"{sep}<span style='opacity:0.75'>{escape(r['condition'])}</span>"
+                # Sans valeur ni condition, la citation est la seule information.
+                if not entete:
+                    entete = f"<span style='opacity:0.75'>{escape(r['citation'][:160])}</span>"
+                
+                lien = ""
+                if r["url"] and r["page"]:
+                    lien = (f" <a href='{r['url']}' target='_blank' "
+                            f"style='font-size:0.85em'>{t['ouvrir_page'].format(page=r['page'])}</a>")
+                st.markdown(
+                    f"<div style='border-left:3px solid rgba(128,128,128,0.45);"
+                    f"padding-left:10px;margin-bottom:8px'>{entete}{lien}</div>",
+                    unsafe_allow_html=True,
+                )
+                if r["citation"] and (r["valeur"] or r["condition"]):
+                    with st.expander(t["voir_citation"], expanded=False):
+                        st.caption(f"« {r['citation']} »")
+
+    renvois = z.get("renvois") or []
+    if renvois:
+        with st.expander(f"{t['renvois']} ({len(renvois)})"):
+            for x in renvois:
+                st.caption(f"→ {x}")
+
 def afficher_prescriptions(prescriptions, t):
     """Prescriptions graphiques, groupées par niveau d'impact."""
     from html import escape
@@ -629,8 +815,26 @@ def afficher_resultat(donnees, langue):
 
     st.divider()
 
+    # Les règles du règlement, zone par zone, avant les contraintes graphiques :
+    # c'est le texte qui fixe l'essentiel du projet.
+    zones_avec_regles = [z for z in parcelle["zones"] if z.get("groupes_regles")]
+    if zones_avec_regles:
+        st.subheader(t["regles"])
+        if len(zones_avec_regles) == 1:
+            afficher_regles(zones_avec_regles[0], t)
+        else:
+            for onglet, z in zip(
+                st.tabs([f"{z['libelle']} — {z['part_pct']:.0f} %" for z in zones_avec_regles]),
+                zones_avec_regles,
+            ):
+                with onglet:
+                    afficher_regles(z, t)
+        st.divider()
+
     # En dessous : les contraintes complémentaires.
     bas_gauche, bas_droite = st.columns([3, 2])
+
+
     with bas_gauche:
         afficher_prescriptions(parcelle.get("prescriptions") or [], t)
     with bas_droite:
@@ -639,12 +843,7 @@ def afficher_resultat(donnees, langue):
     if parcelle["avertissements"]:
         st.divider()
         st.subheader(t["avertissements"])
-        for av in parcelle["avertissements"]:
-            texte = traduire_avertissement(av, langue)
-            if av["code"] in ("source_officielle", "page_inconnue"):
-                st.caption(texte)
-            else:
-                st.warning(texte)
+        afficher_avertissements(parcelle["avertissements"], langue, t)
 
 def rechercher_adresse():
     adresse = st.session_state.get("saisie_adresse", "").strip()
