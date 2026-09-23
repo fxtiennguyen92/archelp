@@ -79,12 +79,15 @@ def lister_chapitres(region):
         regl = regls.get(nom) or next(iter(regls.values()), None)
         if regl is None:
             continue
+        
         debut = z.page_chapitre_debut
         fin = min(z.page_chapitre_fin or debut, debut + PAGES_MAX - 1)
-        # Un chapitre de zone tient rarement sur une seule page : c'est le
-        # signe d'un faux positif, souvent la page qui énumère toutes les zones.
+        # Une fin calculée sur une seule page vient d'un titre parasite juste
+        # après le début du chapitre : on lit six pages et on laisse les
+        # contrôles Z et « vide » écarter les faux positifs.
         if fin - debut < 1:
-            continue
+            fin = min(debut + 5, (z.document.reglements.first().nb_pages or debut + 5))
+
         cle = f"{regl.sha256 or regl.fichier.name}:{debut}-{fin}"
         ch = chapitres.setdefault(cle, {"cle": cle, "reglement": regl,
                                         "debut": debut, "fin": fin, "zones": []})
